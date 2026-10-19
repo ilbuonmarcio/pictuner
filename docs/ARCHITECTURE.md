@@ -23,6 +23,12 @@ Keep these responsibilities separate:
 - Histogram service: RGB/luminance analysis of the current rendered state.
 - Export coordinator: immutable job snapshots, destination validation, rendering, progress and errors.
 
+## Editor layout
+
+`InspectorView` keeps the histogram/clipping controls and reset footer fixed, with a session-local Light/Color/Selective/Effects selection. It lays out one adjustment group at a time without a scroll container. Switching groups changes only presentation; leaving Selective clears transient picker/mask state. Existing bindings and slider gesture callbacks continue to drive live rendering and undo grouping.
+
+`PhotoToolbar` sits between the preview and filmstrip. It owns transform actions, Favorite/Reject/export marking, and a Photo actions menu with copy/paste plus contextual batch actions. During crop mode, the same bar presents aspect, Reset, Cancel and Apply. Layout checks bound each expanded inspector group's fitting height to 680 points at 290 points wide, and both toolbar states to 400 points wide.
+
 ## Rendering contract
 
 Define one versioned, deterministic adjustment order. A starting proposal is:

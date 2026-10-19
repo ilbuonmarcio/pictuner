@@ -31,6 +31,8 @@ struct ContentView: View {
                     }.padding(18).allowsHitTesting(false)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
+                PhotoToolbar()
+                Divider()
                 Filmstrip().frame(height: 118)
                 Divider()
                 statusBar

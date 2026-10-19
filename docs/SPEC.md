@@ -35,8 +35,13 @@ Help a single user quickly edit photos stored in local folders. The primary work
 | Left | Workspace list and folder tree |
 | Center | Main image, zoom, comparison button and state |
 | Right, top | Histogram and clipping controls |
-| Right, body | Adjustments, presets, selective color, effects |
+| Right, body | Light, Color, Selective, and Effects tabs; one group at a time, no vertical scrolling |
+| Above filmstrip | Crop/rotate/flip, Favorite/Reject/export marking, and Photo actions menu; contextual crop controls while cropping |
 | Bottom | Filmstrip and image selection/navigation |
+
+Keep the histogram and clipping toggle visible above the adjustment tabs, with Reset All Edits fixed at the bottom. Light contains tone controls; Color contains white balance, hue and saturation; Selective contains the eyedropper and all seven range/effect sliders; Effects contains looks, vignette, and presets. Each panel must fit at the minimum 1000 × 680 content size without scrolling or hiding controls. Switching tabs preserves adjustments and cancels transient color picking/mask views when leaving Selective.
+
+Copy/paste and multi-selection actions live in the Photo actions menu above the filmstrip. Batch actions only appear for multiple selections. Crop mode replaces that bar with aspect, Reset, Cancel and Apply controls beside the image.
 
 Keep frequently used adjustments directly accessible. Save preset thumbnails in the inspector rather than crowding the filmstrip. The layout should remain usable when the window is resized.
 
@@ -70,7 +75,7 @@ Distinguish numerical adjustments from presets, which store reusable settings. P
 
 ## Crop, rotate, and mirror
 
-- Provide 90° clockwise/counterclockwise rotation and horizontal/vertical flip in the Transform inspector and Photo menu.
+- Provide 90° clockwise/counterclockwise rotation and horizontal/vertical flip in the photo toolbar above the filmstrip and the Photo menu.
 - Crop (⌘K) shows the full rotated/mirrored image at Fit, with a draggable rectangle, corner handles, rule-of-thirds grid, and dimmed excluded area. Drag inside to move the selection, or outside it to draw a new rectangle.
 - Offer Free, Original, 1:1, 4:3, 3:2, 16:9, 3:4, 2:3, and 9:16 aspect ratios. Original means the full image's current rotated aspect ratio.
 - Apply/Return commits one undoable crop; Cancel/Escape discards the draft. Arrow keys move the crop by one source pixel, Shift-arrow by ten. Reset restores the largest crop for the selected aspect. Remove Crop restores the full frame without changing color edits, rotation, or mirror settings.
@@ -136,7 +141,7 @@ Persist all parameters. Handle hue wraparound, especially red, without a discont
 ## Export
 
 - Each photo has an explicit **Include in Export** flag, separate from Favorite and thumbnail selection. New photos and photos migrated from older metadata start unmarked.
-- The inspector provides the toggle (⇧⌘G), the filmstrip provides a context action, and multi-selected images can be marked/unmarked together. Flags survive navigation and app restarts.
+- The photo toolbar provides the checkmark toggle (⇧⌘G), the filmstrip provides a context action, and multi-selected images can be marked/unmarked together through Photo actions. Flags survive navigation and app restarts.
 - Rejecting a photo clears its export flag. Explicitly marking a rejected photo for export clears rejection.
 - Export includes only marked, non-rejected photos. Default to all such photos across the workspace, even if a subfolder is currently displayed. Optional scopes narrow these to the current folder subtree, thumbnail selection, or favorites; no scope includes unmarked photos.
 - Show an exact included count in the export dialog and label scopes as marked photos. When nothing qualifies, show the marking instruction and disable starting export. Keep color-profile/metadata policy concise; report destination restrictions only when a chosen destination is invalid.
@@ -167,6 +172,8 @@ These phases are implementation order, not permission to omit later phases from 
 - Cloud sync, accounts, and collaboration.
 
 ## Acceptance criteria
+
+- At minimum window size, switch through all adjustment tabs with selective color enabled and confirm every control fits without inspector scrolling. Verify crop controls and photo actions fit the narrowest preview.
 
 - Add a folder with nested JPEG, PNG, and supported RAW samples; navigate it without modifying source files.
 - Adjust a photo, navigate away and back, restart the app, and verify settings and appearance persist.
