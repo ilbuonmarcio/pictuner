@@ -1,6 +1,6 @@
 # Pictuner product specification
 
-Status: agreed product direction, implementation pending.
+Status: agreed product direction; first development implementation available. See [development status](DEVELOPMENT.md) for verified behavior and remaining limitations.
 Updated: 2026-10-19.
 
 ## Platform requirement
@@ -18,7 +18,7 @@ Help a single user quickly edit photos stored in local folders. The primary work
 - Selecting a workspace shows its images, including nested folders. Selecting a subfolder narrows the view to that subtree.
 - Use a stable, natural filename ordering with relative path as a deterministic tie-breaker. Additional sorting modes can follow later.
 - The center shows a large preview with fit-to-window and zoom controls.
-- A bottom filmstrip shows nearby thumbnails, selection, edited status, favorites, and rejected status.
+- A bottom filmstrip shows nearby thumbnails, selection, edited status, favorites, rejected status, and a green checkmark for photos included in export.
 - Left/right arrows navigate previous/next image while the browsing surface has focus. Do not intercept typing or slider keyboard input. Stop at the first and last image rather than wrapping.
 - Support selecting multiple images for batch adjustments and export while maintaining one active preview image.
 - Missing, unreadable, or unsupported files show a useful error without losing saved edits or preventing navigation.
@@ -57,6 +57,7 @@ Initial adjustments:
 Distinguish numerical adjustments from presets, which store reusable settings. Provide built-in looks and the ability to save custom presets. Applying a preset changes editable settings and is undoable. Exact slider ranges and additional vignette styles will be validated against the rendering implementation.
 
 - Provide reset and undo/redo for image edits; coalesce one slider drag into one undo action.
+- Apply slider and setting changes continuously while dragging; do not wait for mouse release or a pause in input. The preview, histogram, and mask/clipping views should follow completed live frames. A smaller interactive preview is acceptable if the normal-resolution preview is restored after release; export always uses full-resolution source data.
 - Copy/paste adjustments between photos and apply adjustments to selected images. These operations copy settings, not rendered pixels.
 - Editing one image must not inadvertently change another image's saved state.
 
@@ -106,7 +107,7 @@ Persist all parameters. Handle hue wraparound, especially red, without a discont
 
 ## Persistence
 
-- Autosave per-image edits, favorite/reject state, and workspace settings to `.pictuner/workspace.json` under the workspace root.
+- Autosave per-image edits, favorite/reject state, export-inclusion flags, and workspace settings to `.pictuner/workspace.json` under the workspace root.
 - Use relative paths so moving a workspace folder preserves associations.
 - Store a metadata format version and implement explicit migrations when needed.
 - Save safely and atomically. Image changes and normal app closure must not discard pending edits.
@@ -117,7 +118,11 @@ Persist all parameters. Handle hue wraparound, especially red, without a discont
 
 ## Export
 
-- Export all, selected, or flagged/favorite images. Rejected photos are visibly identified; the export dialog must state what is included rather than silently filtering them.
+- Each photo has an explicit **Include in Export** flag, separate from Favorite and thumbnail selection. New photos and photos migrated from older metadata start unmarked.
+- The inspector provides the toggle (⇧⌘G), the filmstrip provides a context action, and multi-selected images can be marked/unmarked together. Flags survive navigation and app restarts.
+- Rejecting a photo clears its export flag. Explicitly marking a rejected photo for export clears rejection.
+- Export includes only marked, non-rejected photos. Default to all such photos across the workspace, even if a subfolder is currently displayed. Optional scopes narrow these to the current folder subtree, thumbnail selection, or favorites; no scope includes unmarked photos.
+- Show an exact included count in the export dialog and explain that unmarked/rejected images are excluded. When nothing qualifies, explain how to mark photos and disable starting export.
 - Choose an output folder, JPEG or PNG, JPEG quality, and optional resizing.
 - Optionally preserve relative source folder structure.
 - Render with full-resolution source data and current saved adjustment settings.
@@ -150,9 +155,11 @@ These phases are implementation order, not permission to omit later phases from 
 - Adjust a photo, navigate away and back, restart the app, and verify settings and appearance persist.
 - Hold/release Space and the comparison button; confirm the correct original appears without moving the viewport or changing edits.
 - Confirm slider focus and text entry do not trigger image navigation or comparison accidentally.
+- Drag a slider continuously and verify multiple visibly different image frames appear before mouse-up, along with updated histogram/effect previews. Verify the final setting is rendered at normal preview resolution after release and the whole drag undoes in one step. Rapid selection must still discard frames from the previous image/workspace.
 - Verify RGB/luminance histograms follow edits and original comparison, and clipping indicators respond to clipped regions.
 - Isolate green on a test image, mute other colors, inspect the soft mask, and reproduce the effect after reopening. Test a red sample across the hue boundary as well.
 - Copy settings and apply them to selected images without modifying unselected images.
+- Mark a subset for export, navigate/reopen, and verify the flags persist. Confirm that every export scope excludes unmarked and rejected images and that the default includes marked photos in nested folders. Migrating older metadata must preserve edits without implicitly marking favorites or other photos.
 - Export a mixed-format workspace at full resolution; verify consistent edits, source preservation, collision handling, progress, and cancellation.
 - Simulate malformed metadata, read-only storage, missing files, and interrupted saving; verify clear errors and preservation of existing data.
 - Navigate rapidly through large images; verify stale renders never replace the active photo and the UI stays interactive.
