@@ -1,7 +1,9 @@
-# Pictuner product specification
+# PicTuner product specification
 
 Status: agreed product direction; first development implementation available. See [development status](DEVELOPMENT.md) for verified behavior and remaining limitations.
 Updated: 2026-10-19.
+
+The app name is **PicTuner** (capital T).
 
 ## Platform requirement
 
@@ -18,6 +20,9 @@ Help a single user quickly edit photos stored in local folders. The primary work
 - Selecting a workspace shows its images, including nested folders. Selecting a subfolder narrows the view to that subtree.
 - Use a stable, natural filename ordering with relative path as a deterministic tie-breaker. Additional sorting modes can follow later.
 - The center shows a large preview with fit-to-window and zoom controls.
+- Zoom includes Fit, 100% actual pixels, percentage presets through 800%, and zoom-in/out buttons. At 100%, one source pixel maps to one physical display pixel, accounting for Retina scale. Support pinch-to-zoom, mouse-wheel zoom, Option-scroll zoom, drag/two-finger pan, and double-click to toggle Fit/100% around the clicked image point. Keyboard shortcuts are ⌘0 (Fit), ⌘1 (100%), ⌘+ and ⌘−.
+- Keep the image, shadows, and all overlays clipped to the preview area at every zoom/pan position; the toolbar, sidebar, inspector, and filmstrip must remain visible.
+- Zoomed views render additional detail from the source image for the visible region rather than magnifying only the reduced preview. Keep the region under the pointer steady while zooming, constrain panning to the image, and retain the viewport during edits/comparison. Selecting another photo resets to Fit.
 - A bottom filmstrip shows nearby thumbnails, selection, edited status, favorites, rejected status, and a green checkmark for photos included in export.
 - Left/right arrows navigate previous/next image while the browsing surface has focus. Do not intercept typing or slider keyboard input. Stop at the first and last image rather than wrapping.
 - Support selecting multiple images for batch adjustments and export while maintaining one active preview image.
@@ -34,6 +39,8 @@ Help a single user quickly edit photos stored in local folders. The primary work
 | Bottom | Filmstrip and image selection/navigation |
 
 Keep frequently used adjustments directly accessible. Save preset thumbnails in the inspector rather than crowding the filmstrip. The layout should remain usable when the window is resized.
+
+Use concise native-app labels. Avoid marketing slogans, demo copy, repeated explanations, and persistent tutorials. Surface guidance in relevant empty/error states or tooltips. Show save failures and export progress; keep routine autosave quiet. Show batch actions only for multi-selection.
 
 ## Image formats and RAW
 
@@ -60,6 +67,16 @@ Distinguish numerical adjustments from presets, which store reusable settings. P
 - Apply slider and setting changes continuously while dragging; do not wait for mouse release or a pause in input. The preview, histogram, and mask/clipping views should follow completed live frames. A smaller interactive preview is acceptable if the normal-resolution preview is restored after release; export always uses full-resolution source data.
 - Copy/paste adjustments between photos and apply adjustments to selected images. These operations copy settings, not rendered pixels.
 - Editing one image must not inadvertently change another image's saved state.
+
+## Crop, rotate, and mirror
+
+- Provide 90° clockwise/counterclockwise rotation and horizontal/vertical flip in the Transform inspector and Photo menu.
+- Crop (⌘K) shows the full rotated/mirrored image at Fit, with a draggable rectangle, corner handles, rule-of-thirds grid, and dimmed excluded area. Drag inside to move the selection, or outside it to draw a new rectangle.
+- Offer Free, Original, 1:1, 4:3, 3:2, 16:9, 3:4, 2:3, and 9:16 aspect ratios. Original means the full image's current rotated aspect ratio.
+- Apply/Return commits one undoable crop; Cancel/Escape discards the draft. Arrow keys move the crop by one source pixel, Shift-arrow by ten. Reset restores the largest crop for the selected aspect. Remove Crop restores the full frame without changing color edits, rotation, or mirror settings.
+- Geometry changes reset the viewport to Fit. Rotating/flipping a cropped image transforms the existing selection along with it. Navigating away cancels an uncommitted crop; export waits until Apply or Cancel.
+- Persist normalized crop coordinates after rotation/mirroring. Round crop boundaries once at source resolution; preview, detail rendering, histogram, sampling, and export use that same image geometry.
+- Presets, copy/paste, and batch color edits preserve each destination photo's own framing. The main Reset action resets all edits, including geometry.
 
 ## Selective color
 
@@ -97,13 +114,13 @@ Persist all parameters. Handle hue wraparound, especially red, without a discont
 ## Original comparison
 
 - Press and hold Space to temporarily show the original; releasing Space restores the edited preview.
-- Provide a visible press-and-hold Show Original button above the preview with the same behavior and accessible labeling.
+- Provide a visible press-and-hold Original button above the preview with the same behavior and accessible labeling. Put the hold/Space instruction in its tooltip rather than its title.
 - Display an Original indicator while comparison is active.
 - Comparison does not change settings, autosave data, or undo history.
-- Maintain the same image, zoom, and pan position during comparison.
+- Maintain the same image, crop, rotation, mirror, zoom, and pan position during comparison. Original comparison temporarily bypasses color/tone/effect adjustments; Remove Crop restores the full frame.
 - Ignore key repeat. Restore the edited view on focus loss, interrupted pointer interaction, or image changes so comparison cannot become stuck.
 - Do not intercept Space while typing or when another focused control needs it.
-- For RAW files, original means default RAW development before user adjustments.
+- For RAW files, original means default RAW development before user color/tone/effect adjustments, with the current framing retained.
 
 ## Persistence
 
@@ -122,7 +139,7 @@ Persist all parameters. Handle hue wraparound, especially red, without a discont
 - The inspector provides the toggle (⇧⌘G), the filmstrip provides a context action, and multi-selected images can be marked/unmarked together. Flags survive navigation and app restarts.
 - Rejecting a photo clears its export flag. Explicitly marking a rejected photo for export clears rejection.
 - Export includes only marked, non-rejected photos. Default to all such photos across the workspace, even if a subfolder is currently displayed. Optional scopes narrow these to the current folder subtree, thumbnail selection, or favorites; no scope includes unmarked photos.
-- Show an exact included count in the export dialog and explain that unmarked/rejected images are excluded. When nothing qualifies, explain how to mark photos and disable starting export.
+- Show an exact included count in the export dialog and label scopes as marked photos. When nothing qualifies, show the marking instruction and disable starting export. Keep color-profile/metadata policy concise; report destination restrictions only when a chosen destination is invalid.
 - Choose an output folder, JPEG or PNG, JPEG quality, and optional resizing.
 - Optionally preserve relative source folder structure.
 - Render with full-resolution source data and current saved adjustment settings.
@@ -154,6 +171,7 @@ These phases are implementation order, not permission to omit later phases from 
 - Add a folder with nested JPEG, PNG, and supported RAW samples; navigate it without modifying source files.
 - Adjust a photo, navigate away and back, restart the app, and verify settings and appearance persist.
 - Hold/release Space and the comparison button; confirm the correct original appears without moving the viewport or changing edits.
+- Inspect a high-frequency test image at 100% on a Retina display and verify source pixels resolve beyond the overview's detail. Verify anchored zoom, bounded panning, Fit reset, higher-resolution original/mask/clipping views, and unchanged photo metadata when zooming. Vignette position and other image-wide effect coordinates must remain consistent in the detail region.
 - Confirm slider focus and text entry do not trigger image navigation or comparison accidentally.
 - Drag a slider continuously and verify multiple visibly different image frames appear before mouse-up, along with updated histogram/effect previews. Verify the final setting is rendered at normal preview resolution after release and the whole drag undoes in one step. Rapid selection must still discard frames from the previous image/workspace.
 - Verify RGB/luminance histograms follow edits and original comparison, and clipping indicators respond to clipped regions.

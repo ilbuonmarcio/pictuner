@@ -6,7 +6,6 @@ private let accent = Color(red: 0.95, green: 0.69, blue: 0.36)
 
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
-    @State private var zoom = 1.0
     var body: some View {
         HStack(spacing: 0) {
             WorkspaceSidebar().frame(minWidth: 190, idealWidth: 215, maxWidth: 250)
@@ -15,16 +14,16 @@ struct ContentView: View {
                 previewToolbar
                 Divider()
                 ZStack {
-                    PreviewCanvas(image: displayImage, clipping: displayClipping, identity: model.selectedID, zoom: zoom, picking: model.pickingColor, compare: { model.showingOriginal = $0 }, navigate: model.navigate, sample: model.sampleColor)
+                    PreviewCanvas(image: displayImage, clipping: displayClipping, detailImage: displayDetail, detailClipping: detailClipping, detailRegion: model.preview?.detail?.region, sourceSize: model.preview?.sourceSize ?? .zero, identity: model.selectedID, viewport: model.viewport, picking: model.pickingColor, crop: model.preview == nil ? nil : model.cropDraft, cropRatio: model.cropRatio, cropChanged: model.updateCrop, cropFinished: { if $0 { model.applyCrop() } else { model.cancelCrop() } }, viewportChanged: { model.updateViewport($0, canvas: $1, backing: $2) }, geometryChanged: { model.updateCanvasGeometry($0, backing: $1) }, compare: { model.showingOriginal = $0 }, navigate: model.navigate, sample: model.sampleColor)
                     if model.activePhoto == nil { emptyState }
                     else if let error = model.previewError {
                         ContentUnavailableView("Unable to open image", systemImage: "exclamationmark.triangle", description: Text(error))
-                    } else if model.preview == nil { ProgressView("Developing image…").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
+                    } else if model.preview == nil { ProgressView().accessibilityLabel("Loading image").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
                     VStack {
                         HStack {
-                            if model.showingOriginal { badge("ORIGINAL", icon: "circle.lefthalf.filled") }
-                            else if model.showMask { badge("COLOR MASK", icon: "viewfinder") }
-                            else if model.pickingColor { badge("CLICK A COLOR IN THE PHOTO", icon: "eyedropper") }
+                            if model.showingOriginal { badge("Original", icon: "circle.lefthalf.filled") }
+                            else if model.showMask { badge("Mask", icon: "viewfinder") }
+                            else if model.pickingColor { badge("Pick a color", icon: "eyedropper") }
                             Spacer()
                             if model.isRendering && model.preview != nil { ProgressView().controlSize(.small).padding(12) }
                         }
@@ -44,21 +43,15 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .frame(minWidth: 1000, minHeight: 680)
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                HStack(spacing: 8) {
-                    Image(systemName: "camera.aperture").foregroundStyle(accent)
-                }
-            }
             ToolbarItem(placement: .primaryAction) {
-                Button { model.showExportSheet = true } label: { Label("Export Copies", systemImage: "square.and.arrow.up") }
-                    .disabled(model.photos.isEmpty || model.exporting)
+                Button { model.showExportSheet = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                    .disabled(model.photos.isEmpty || model.exporting || model.isCropping)
             }
         }
-        .onChange(of: model.selectedID) { _, _ in zoom = 1 }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in model.showingOriginal = false }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in model.showingOriginal = false }
         .sheet(isPresented: $model.showExportSheet) { ExportSheet().tint(accent) }
-        .alert("Pictuner", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
+        .alert("PicTuner", isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })) {
             if model.hasUnsavedEdits {
                 Button("Retry Saving") { model.flush() }
                 Button("Reload & Discard Unsaved Edits", role: .destructive) { model.discardAndReload() }
@@ -80,34 +73,49 @@ struct ContentView: View {
         guard model.showClipping, !model.showMask else { return nil }
         return model.showingOriginal ? model.preview?.originalClipping : model.preview?.clipping
     }
+    private var displayDetail: CGImage? {
+        guard let detail = model.preview?.detail else { return nil }
+        if model.showingOriginal { return detail.original }
+        if model.showMask { return detail.mask ?? detail.edited }
+        return detail.edited
+    }
+    private var detailClipping: CGImage? {
+        guard model.showClipping, !model.showMask else { return nil }
+        return model.showingOriginal ? model.preview?.detail?.originalClipping : model.preview?.detail?.clipping
+    }
     private var previewToolbar: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.activePhoto?.name ?? "Your next great edit").font(.system(size: 13, weight: .medium)).lineLimit(1)
+                if let photo = model.activePhoto { Text(photo.name).font(.system(size: 13, weight: .medium)).lineLimit(1) }
                 if let preview = model.preview {
                     Text("\(Int(preview.sourceSize.width)) × \(Int(preview.sourceSize.height))\(model.activePhoto?.isRAW == true ? "  ·  RAW" : "")").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
             }
             Spacer(minLength: 4)
-            CompareButton(enabled: model.preview != nil, comparing: model.showingOriginal, onChange: { model.showingOriginal = $0 }).frame(width: 185, height: 24)
-            Menu {
-                Button("Fit") { zoom = 1 }
-                Button("2× Fit") { zoom = 2 }
-                Button("4× Fit") { zoom = 4 }
-            } label: { Text(zoom == 1 ? "Fit" : "\(Int(zoom))×").monospacedDigit() }.frame(width: 55)
+            CompareButton(enabled: model.preview != nil, comparing: model.showingOriginal, onChange: { model.showingOriginal = $0 }).frame(width: 88, height: 24)
+            HStack(spacing: 5) {
+                Button { model.zoomBy(1/sqrt(2)) } label: { Image(systemName: "minus.magnifyingglass") }.help("Zoom out · ⌘−").accessibilityLabel("Zoom out")
+                Menu {
+                    Button("Fit to Window") { model.setZoom(nil) }
+                    ForEach([0.25, 0.5, 1, 2, 4, 8], id: \.self) { scale in
+                        Button(scale == 1 ? "100% (Actual Pixels)" : "\(Int(scale*100))%") { model.setZoom(scale) }
+                    }
+                } label: { Text(model.viewport.label).monospacedDigit() }.frame(width: 74)
+                    .accessibilityLabel("Zoom")
+                Button { model.zoomBy(sqrt(2)) } label: { Image(systemName: "plus.magnifyingglass") }.help("Zoom in · ⌘+").accessibilityLabel("Zoom in")
+            }.buttonStyle(.borderless).disabled(model.preview == nil || model.isCropping)
         }.padding(.horizontal, 16).frame(height: 58)
     }
     private var emptyState: some View {
         VStack(spacing: 18) {
-            Image(systemName: "camera.aperture").font(.system(size: 54, weight: .ultraLight)).foregroundStyle(accent)
-            Text(model.isLoading ? "Finding your photos…" : model.activeWorkspace == nil ? "A little light. A little color." : "No photos here yet.").font(.system(size: 24, weight: .light))
-            Text(model.activeWorkspace == nil ? "Open a folder and make it yours.\nYour originals always stay untouched." : "Choose a folder with JPEG, PNG, or supported RAW images.").font(.system(size: 13)).foregroundStyle(.secondary).multilineTextAlignment(.center).lineSpacing(5)
+            Image(systemName: "photo.on.rectangle").font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
+            Text(model.isLoading ? "Loading…" : model.activeWorkspace == nil ? "No Workspace" : "No Images").font(.system(size: 18, weight: .medium))
             if model.activeWorkspace == nil { Button("Add Workspace…", action: model.addWorkspace).buttonStyle(.borderedProminent).controlSize(.large) }
             if model.isLoading { ProgressView().controlSize(.small) }
         }.padding(32)
     }
     private func badge(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon).font(.system(size: 10, weight: .semibold)).tracking(1).padding(.horizontal, 10).padding(.vertical, 7).background(.regularMaterial, in: Capsule())
+        Label(text, systemImage: icon).font(.system(size: 11, weight: .medium)).padding(.horizontal, 10).padding(.vertical, 7).background(.regularMaterial, in: Capsule())
     }
     private var statusBar: some View {
         HStack(spacing: 10) {
@@ -115,13 +123,13 @@ struct ContentView: View {
                 ProgressView(value: model.exportProgress).frame(width: 90)
                 Text(model.exportLabel).lineLimit(1)
                 Button("Cancel", action: model.cancelExport).buttonStyle(.link)
-            } else {
-                Image(systemName: model.saveStatus == "All edits saved" ? "checkmark.circle" : "exclamationmark.circle")
+            } else if model.saveStatus != "All edits saved" && model.saveStatus != "Saving edits…" {
+                Image(systemName: "exclamationmark.circle")
                 Text(model.saveStatus).lineLimit(1).help(model.saveStatus)
                 if model.saveStatus.hasPrefix("Edits are not saved") { Button("Retry") { model.flush() }.buttonStyle(.link) }
             }
             Spacer()
-            Text("\(model.visiblePhotos.count) photos · \(model.exportReadyCount) marked for export\(model.selectedCount > 1 ? " · \(model.selectedCount) selected" : "")")
+            Text("\(model.visiblePhotos.count) photos\(model.exportReadyCount > 0 ? " · \(model.exportReadyCount) marked for export" : "")\(model.selectedCount > 1 ? " · \(model.selectedCount) selected" : "")")
         }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 14).frame(height: 30)
     }
 }
@@ -130,7 +138,7 @@ private struct WorkspaceSidebar: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack { Text("WORKSPACES").font(.system(size: 10, weight: .semibold)).tracking(1.4).foregroundStyle(.secondary); Spacer(); Button(action: model.addWorkspace) { Image(systemName: "plus") }.buttonStyle(.plain).help("Add Workspace") }.padding(18)
+            HStack { Text("Workspaces").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary); Spacer(); Button(action: model.addWorkspace) { Image(systemName: "plus") }.buttonStyle(.plain).help("Add Workspace") }.padding(18)
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(model.workspaces) { workspace in
@@ -145,7 +153,7 @@ private struct WorkspaceSidebar: View {
                                 .background(model.activeWorkspace == workspace && model.folder.isEmpty ? accent.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
                                 .contextMenu {
                                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([workspace.url]) }
-                                    Button("Remove Workspace Reference") { model.removeWorkspace(workspace) }
+                                    Button("Remove Workspace") { model.removeWorkspace(workspace) }
                                     Button("Refresh") { model.open(workspace) }
                                 }
                             if model.activeWorkspace == workspace {
@@ -156,10 +164,6 @@ private struct WorkspaceSidebar: View {
                 }.padding(.horizontal, 9)
             }
             Spacer(minLength: 0)
-            VStack(alignment: .leading, spacing: 7) {
-                Label("Originals stay original", systemImage: "lock.shield").font(.system(size: 11, weight: .medium))
-                Text("Edits are saved alongside your workspace. Export when you're ready.").font(.system(size: 10)).foregroundStyle(.secondary).lineSpacing(3)
-            }.foregroundStyle(.secondary).padding(18)
         }.background(Color(nsColor: .underPageBackgroundColor).opacity(0.4))
     }
 }

@@ -2,11 +2,11 @@ import SwiftUI
 import AppKit
 
 @main
-struct PictunerApp: App {
+struct PicTunerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
     var body: some Scene {
-        Window("Pictuner", id: "main") {
+        Window("PicTuner", id: "main") {
             ContentView().environmentObject(model)
                 .onAppear { delegate.model = model }
         }
@@ -20,15 +20,28 @@ struct PictunerApp: App {
                 Button("Undo Edit", action: model.undo).keyboardShortcut("z").disabled(!model.canUndo)
                 Button("Redo Edit", action: model.redo).keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo)
             }
+            CommandGroup(after: .toolbar) {
+                Divider()
+                Button("Zoom In") { model.zoomBy(sqrt(2)) }.keyboardShortcut("+", modifiers: .command).disabled(model.preview == nil || model.isCropping)
+                Button("Zoom Out") { model.zoomBy(1/sqrt(2)) }.keyboardShortcut("-", modifiers: .command).disabled(model.preview == nil || model.isCropping)
+                Button("Fit to Window") { model.setZoom(nil) }.keyboardShortcut("0", modifiers: .command).disabled(model.preview == nil || model.isCropping)
+                Button("Actual Pixels (100%)") { model.setZoom(1) }.keyboardShortcut("1", modifiers: .command).disabled(model.preview == nil || model.isCropping)
+            }
             CommandMenu("Photo") {
+                Button("Crop…", action: model.beginCrop).keyboardShortcut("k").disabled(!model.canEdit || model.preview == nil || model.isCropping)
+                Button("Rotate Left 90°") { model.rotate(clockwise: false) }.disabled(!model.canEdit || model.isCropping)
+                Button("Rotate Right 90°") { model.rotate(clockwise: true) }.disabled(!model.canEdit || model.isCropping)
+                Button("Flip Horizontally") { model.flip(horizontal: true) }.disabled(!model.canEdit || model.isCropping)
+                Button("Flip Vertically") { model.flip(horizontal: false) }.disabled(!model.canEdit || model.isCropping)
+                Divider()
                 Button(model.settings.exportReady ? "Remove from Export" : "Include in Export", action: model.toggleExportReady)
                     .keyboardShortcut("g", modifiers: [.command, .shift]).disabled(!model.canEdit)
                 Divider()
                 Button("Copy Adjustments", action: model.copyAdjustments).keyboardShortcut("c", modifiers: [.command, .shift]).disabled(model.activePhoto == nil)
-                Button("Paste Adjustments", action: model.pasteAdjustments).keyboardShortcut("v", modifiers: [.command, .shift]).disabled(!model.hasCopiedAdjustments || !model.canEdit)
+                Button("Paste Adjustments", action: model.pasteAdjustments).keyboardShortcut("v", modifiers: [.command, .shift]).disabled(!model.hasCopiedAdjustments || !model.canEdit || model.isCropping)
                 Button("Select All Photos", action: model.selectAll).keyboardShortcut("a", modifiers: [.command, .shift])
                 Divider()
-                Button("Export Copies…") { model.showExportSheet = true }.keyboardShortcut("e", modifiers: [.command, .shift]).disabled(model.photos.isEmpty || model.exporting)
+                Button("Export…") { model.showExportSheet = true }.keyboardShortcut("e", modifiers: [.command, .shift]).disabled(model.photos.isEmpty || model.exporting || model.isCropping)
             }
         }
     }
@@ -38,6 +51,10 @@ struct PictunerApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApplication.shared.applicationIconImage = icon
+        }
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
     }

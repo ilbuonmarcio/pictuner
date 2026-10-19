@@ -18,12 +18,12 @@ final class WorkspaceStore {
             if FileManager.default.fileExists(atPath: metadataURL.path) {
                 let data = try Data(contentsOf: metadataURL)
                 let header = try JSONDecoder().decode(VersionHeader.self, from: data)
-                guard (1...2).contains(header.schemaVersion), header.renderVersion == 1 else {
+                guard (1...3).contains(header.schemaVersion), header.renderVersion == 1 else {
                     throw PictunerError.message("This workspace uses a newer or unsupported metadata version. Its metadata has been preserved.")
                 }
                 document = try JSONDecoder().decode(WorkspaceDocument.self, from: data)
-                // Migration 1 → 2 preserves edits and initializes missing export flags to false.
-                document.schemaVersion = 2
+                // Migrate legacy export flags and geometry with neutral defaults.
+                document.schemaVersion = 3
                 expectedData = data
             }
         } catch {

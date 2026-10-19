@@ -4,10 +4,10 @@ import UniformTypeIdentifiers
 import Darwin
 
 enum ExportScope: String, CaseIterable {
-    case ready = "Marked for export · workspace"
-    case currentFolder = "Marked in current folder"
-    case selected = "Marked in selection"
-    case favorites = "Marked favorites · workspace"
+    case ready = "Marked in Workspace"
+    case currentFolder = "Marked in Folder"
+    case selected = "Marked in Selection"
+    case favorites = "Marked Favorites"
 }
 enum OutputFormat: String, CaseIterable { case jpeg = "JPEG", png = "PNG" }
 enum CollisionPolicy: String, CaseIterable { case rename = "Add a number", skip = "Skip existing" }
@@ -38,7 +38,7 @@ enum Exporter {
 
     static func validateDestination(_ destination: URL, roots: [URL]) throws {
         guard !roots.contains(where: { isWithin(destination, root: $0) }) else {
-            throw PictunerError.message("Choose an export folder outside your workspaces. This keeps exported copies out of the source library.")
+            throw PictunerError.message("Choose an export folder outside your workspaces.")
         }
     }
 

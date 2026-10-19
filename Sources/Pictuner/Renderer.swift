@@ -21,6 +21,17 @@ struct PreviewResult {
     let histogram: HistogramData
     let originalHistogram: HistogramData
     let sourceSize: CGSize
+    var detail: DetailResult? = nil
+}
+
+struct DetailResult {
+    let region: CGRect
+    let original: CGImage
+    let edited: CGImage
+    let samplingImage: CGImage
+    let mask: CGImage?
+    let clipping: CGImage
+    let originalClipping: CGImage
 }
 
 /// Owned by the render queue; export uses its own instance on a separate serial queue.
@@ -37,6 +48,15 @@ final class Renderer {
         let clipping: CGImage
     }
     private var preparedPreviews: [Double: PreparedPreview] = [:]
+    private struct PreparedDetail {
+        let region: CGRect
+        let scale: Double
+        let baseline: CIImage
+        let original: CGImage
+        let clipping: CGImage
+    }
+    private var preparedDetail: PreparedDetail?
+    private var preparedGeometry: ImageGeometry?
 
     private static let hsvFunctions = """
     vec3 toHSV(vec3 c) {
@@ -100,6 +120,7 @@ final class Renderer {
         let normalized = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         cachedURL = url; cachedDate = date; cachedImage = normalized
         preparedPreviews.removeAll()
+        preparedDetail = nil
         return normalized
     }
 
@@ -128,13 +149,33 @@ final class Renderer {
         return image
     }
 
-    func render(_ input: CIImage, adjustments a: Adjustments) throws -> CIImage {
+    func orient(_ input: CIImage, geometry: ImageGeometry) -> CIImage {
+        let orientations: [CGImagePropertyOrientation] = [.up, .right, .down, .left]
+        var image = input.oriented(orientations[((geometry.quarterTurns % 4)+4)%4])
+        if geometry.flipHorizontal { image = image.oriented(.upMirrored) }
+        if geometry.flipVertical { image = image.oriented(.downMirrored) }
+        return image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
+    }
+
+    func geometry(_ input: CIImage, _ geometry: ImageGeometry) -> CIImage {
+        let image = orient(input, geometry: geometry)
+        guard let crop = geometry.crop else { return image }
+        let rect = crop.pixelRect(in: image.extent.size)
+        return image.cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
+    }
+
+    func render(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil) throws -> CIImage {
+        try renderColors(geometry(input, a.geometry), adjustments: a, referenceSize: referenceSize)
+    }
+
+    private func renderColors(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil) throws -> CIImage {
         var image = beforeSelective(input, a)
         if a.selective.enabled { image = try selective(image, a.selective) }
         if a.monochrome > 0 { image = image.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1-a.monochrome]) }
         if a.sepia > 0 { image = image.applyingFilter("CISepiaTone", parameters: [kCIInputIntensityKey: a.sepia]) }
         if a.vignette > 0 {
-            guard let filtered = vignetteKernel?.apply(extent: image.extent, arguments: [image, CIVector(x: input.extent.width, y: input.extent.height), a.vignette, a.vignetteRadius, a.vignetteSoftness]) else {
+            let size = referenceSize ?? input.extent.size
+            guard let filtered = vignetteKernel?.apply(extent: image.extent, arguments: [image, CIVector(x: size.width, y: size.height), a.vignette, a.vignetteRadius, a.vignetteSoftness]) else {
                 throw PictunerError.message("The vignette shader could not be initialized.")
             }
             image = filtered
@@ -163,8 +204,13 @@ final class Renderer {
         return try cgImage(clipped)
     }
 
-    func preview(url: URL, adjustments: Adjustments, longEdge: Double = 1800) throws -> PreviewResult {
-        let source = try load(url)
+    func preview(url: URL, adjustments: Adjustments, longEdge: Double = 1800, detailViewport: DetailViewport? = nil) throws -> PreviewResult {
+        let loaded = try load(url)
+        let source = geometry(loaded, adjustments.geometry)
+        if preparedGeometry != adjustments.geometry {
+            preparedPreviews.removeAll(); preparedDetail = nil
+            preparedGeometry = adjustments.geometry
+        }
         let prepared: PreparedPreview
         if let cached = preparedPreviews[longEdge] { prepared = cached }
         else {
@@ -185,11 +231,43 @@ final class Renderer {
             preparedPreviews[longEdge] = prepared
         }
         let baseline = prepared.baseline
-        let edited = try render(baseline, adjustments: adjustments)
+        let edited = try renderColors(baseline, adjustments: adjustments)
         let final = try cgImage(edited)
         let sampling = try cgImage(beforeSelective(baseline, adjustments))
         let mask = adjustments.selective.enabled ? try cgImage(selective(beforeSelective(baseline, adjustments), adjustments.selective, mask: true)) : nil
-        return PreviewResult(original: prepared.original, edited: final, samplingImage: sampling, mask: mask, clipping: try clipping(final), originalClipping: prepared.clipping, histogram: histogram(CIImage(cgImage: final)), originalHistogram: prepared.histogram, sourceSize: source.extent.size)
+        let detail = try detailViewport.map { try renderDetail(source, viewport: $0, adjustments: adjustments, maximumEdge: longEdge <= 1000 ? 1000 : 4096) }
+        if detailViewport == nil { preparedDetail = nil }
+        return PreviewResult(original: prepared.original, edited: final, samplingImage: sampling, mask: mask, clipping: try clipping(final), originalClipping: prepared.clipping, histogram: histogram(CIImage(cgImage: final)), originalHistogram: prepared.histogram, sourceSize: source.extent.size, detail: detail)
+    }
+
+    private func renderDetail(_ source: CIImage, viewport: DetailViewport, adjustments: Adjustments, maximumEdge: Double) throws -> DetailResult {
+        let size = source.extent.size
+        let r = viewport.region
+        let region = CGRect(x: r.minX*size.width, y: r.minY*size.height, width: r.width*size.width, height: r.height*size.height).integral.intersection(source.extent)
+        guard !region.isEmpty, !region.isNull else { throw PictunerError.message("The zoom region is outside the image.") }
+        let scale = min(1, max(0.001, viewport.scale), maximumEdge/max(region.width, region.height))
+        let prepared: PreparedDetail
+        if let cached = preparedDetail, cached.region == region, cached.scale == scale { prepared = cached }
+        else {
+            let scaled = source.cropped(to: region).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let bounds = scaled.extent.integral
+            let width = Int(bounds.width), height = Int(bounds.height)
+            let extendedSRGB = CGColorSpace(name: CGColorSpace.extendedSRGB)!
+            var pixels = Data(count: width*height*8)
+            pixels.withUnsafeMutableBytes { bytes in
+                context.render(scaled.clampedToExtent(), toBitmap: bytes.baseAddress!, rowBytes: width*8, bounds: bounds, format: .RGBAh, colorSpace: extendedSRGB)
+            }
+            let baseline = CIImage(bitmapData: pixels, bytesPerRow: width*8, size: bounds.size, format: .RGBAh, colorSpace: extendedSRGB).transformed(by: CGAffineTransform(translationX: bounds.minX, y: bounds.minY))
+            let original = try cgImage(baseline)
+            prepared = PreparedDetail(region: region, scale: scale, baseline: baseline, original: original, clipping: try clipping(original))
+            preparedDetail = prepared // Only the current visible crop is retained.
+        }
+        let edited = try cgImage(renderColors(prepared.baseline, adjustments: adjustments, referenceSize: CGSize(width: size.width*scale, height: size.height*scale)))
+        let sampling = try cgImage(beforeSelective(prepared.baseline, adjustments))
+        let mask = adjustments.selective.enabled ? try cgImage(selective(beforeSelective(prepared.baseline, adjustments), adjustments.selective, mask: true)) : nil
+        let bounds = prepared.baseline.extent
+        let normalized = CGRect(x: bounds.minX/scale/size.width, y: bounds.minY/scale/size.height, width: bounds.width/scale/size.width, height: bounds.height/scale/size.height)
+        return DetailResult(region: normalized, original: prepared.original, edited: edited, samplingImage: sampling, mask: mask, clipping: try clipping(edited), originalClipping: prepared.clipping)
     }
 
     func histogram(_ image: CIImage) -> HistogramData {

@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pictuner",
+    name: "PicTuner",
     platforms: [.macOS("26.6.2")],
-    products: [.executable(name: "Pictuner", targets: ["Pictuner"])],
+    products: [.executable(name: "PicTuner", targets: ["Pictuner"])],
     targets: [
         .executableTarget(name: "Pictuner"),
         .testTarget(name: "PictunerTests", dependencies: ["Pictuner"])

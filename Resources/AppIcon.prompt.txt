@@ -1,0 +1,11 @@
+PicTuner app icon
+Generation: built-in image_gen, transparent_background=true.
+User-selected artwork: exec-85fef2d6-97d7-47e4-bbce-e176d6f4da58.png.
+Brand palette: https://goldmark.solutions/css/index.css (checked 2026-10-19).
+The selected artwork is copied unchanged to AppIcon.png; build-icon.sh only resamples and packages it.
+
+Exact generation prompt:
+Use case: logo-brand.
+Create a finished, exceptionally clean macOS app icon for PicTuner. Square artwork, one centered rounded-square tile with a photographic six-blade aperture.
+The tile is cool porcelain #FBFBFD, with a very subtle smooth gray-lavender #EEF1F7 bevel. The six broad geometric aperture blades are saturated violet #5924E5 with restrained lavender #B89CFF highlights and deep-purple #1C094D shadows; a small deep-purple hexagonal opening sits in the center. Use these exact Goldmark Solutions brand colors. Clear simple silhouette, minimal soft dimensional shading, bold enough for a 16-pixel Dock/Finder icon.
+The entire icon must be drawn well INSIDE the canvas, leaving a WIDE completely empty transparent margin of 12% on every edge. Perfectly smooth precise rounded-square outer boundary, uniformly antialiased. Flat, clean, controlled surfaces. The icon is a single isolated connected object. No cast shadow outside the tile, no bloom, no glow, no grain, no scattered pixels, no flecks, no paint effect, no debris, no rough edge, no ornaments. Absolute transparency outside the smooth tile silhouette. No amber or gold anywhere. No text, letters, badges, watermarks, mockup scene, or checkerboard. One icon only, straight-on orthographic view.

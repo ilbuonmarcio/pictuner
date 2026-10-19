@@ -2,6 +2,8 @@
 
 Status: implemented foundation with provisional choices noted below. Product requirements live in [SPEC.md](SPEC.md); implementation limits and verification live in [DEVELOPMENT.md](DEVELOPMENT.md).
 
+The public app name, bundle display name, executable, and built `.app` are **PicTuner**. Keep `com.goldmarksolutions.pictuner`, `.pictuner`, and the existing Application Support/Pictuner folder stable to preserve app identity and saved data; the internal Swift module remains `Pictuner`.
+
 ## Native foundation
 
 Target macOS 26.6.2 or later, as required by the user based on this Mac's installed version. Validate deployment-target support in the installed toolchain during project setup.
@@ -26,21 +28,28 @@ Keep these responsibilities separate:
 Define one versioned, deterministic adjustment order. A starting proposal is:
 
 1. Decode, orientation, RAW baseline and input color management.
-2. White balance and exposure.
-3. Tone adjustments: brightness, contrast, highlights and shadows.
-4. Global hue and saturation.
-5. Selective color.
-6. Black and white/sepia treatment.
-7. Vignette.
-8. Output color conversion.
+2. Quarter-turn rotation, mirroring, and source-pixel crop.
+3. White balance and exposure.
+4. Tone adjustments: brightness, contrast, highlights and shadows.
+5. Global hue and saturation.
+6. Selective color.
+7. Black and white/sepia treatment.
+8. Vignette.
+9. Output color conversion.
 
 Validate this order visually before freezing it. Document interactions such as a monochrome preset removing color retained by selective color. Use resolution-independent effect parameters so vignette and other spatial effects scale consistently.
 
-The original branch stops before user adjustments but retains baseline RAW development, orientation and necessary display conversion. Preview may reduce resolution; export must evaluate the same graph from full-resolution source data. Histogram and mask analysis use documented working spaces rather than display screenshots.
+The original branch stops before user color/tone/effect adjustments but retains baseline RAW development, camera orientation, user crop/rotation/mirroring and necessary display conversion. Preview may reduce resolution; export must evaluate the same graph from full-resolution source data. Histogram and mask analysis use documented working spaces rather than display screenshots.
 
 Selective-color sampling should use the input to the selective-color stage, with a clearly defined coordinate transform from displayed image to source. Persist the sampled color and its color-space interpretation. Use circular hue distance and smooth weights for hue, saturation and brightness. Disabling the effect must be an identity operation.
 
 The implementation evaluates selective-color HSV in gamma-encoded sRGB. Temperature and tint are offsets around a 6500 K neutral in the common post-development pipeline. Selected brightness is an exposure offset in stops. Preview uses a maximum 1,800-pixel long edge when settled and 1,000 pixels during a slider drag; spatial parameters use proportions rather than fixed pixels. Current runtime kernels are deprecated; migrating them to packaged Metal kernels remains a release task.
+
+`PhotoViewport` represents physical-display-pixels per source pixel, plus a normalized bottom-left image center. The canvas converts this to points using its window's backing scale, anchors gestures at the pointer, and reports its visible source region. Fit follows window size; 100% is native display-pixel inspection rather than a multiple of Fit. Viewport state is transient and resets per photo.
+
+When the overview cannot resolve the displayed detail, `PreviewRequest` includes a `DetailViewport`. The renderer develops/crops that visible source region, materializes a half-float baseline, and renders original/edited/sampling/mask/clipping images together with the overview frame. It retains one detail baseline and caps its output at a 4,096-pixel long edge when settled, 1,000 during slider gestures. Scaling is capped at native source resolution; greater magnification enlarges the native pixels. Vignette rendering receives the full scaled image dimensions, so crop offsets do not recenter the effect. Histogram statistics continue to describe the whole image.
+
+The native canvas enables `clipsToBounds` explicitly (modern AppKit defaults to false) and clips its graphics context to its own bounds for every drawing branch, so zoomed image rectangles, shadows and overlays cannot cover adjacent controls. The canvas first draws the overview, then replaces the matching normalized region with the detailed rendering. Original comparison and mask/clipping controls select the corresponding detail image without changing viewport geometry. Eyedropper sampling uses the high-resolution sampling crop when the clicked point is inside it. Panning/zooming share the existing coalescing render scheduler, and image/workspace switches invalidate pending detail frames too.
 
 ## Metadata contract
 
@@ -48,7 +57,7 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "renderVersion": 1,
   "workspaceID": "UUID",
   "images": {
@@ -65,7 +74,11 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 This illustrates structure, not a finalized settings schema. Define typed adjustment fields, neutral defaults, effect enablement, ranges and selective-color parameters before implementation. Use stable workspace/image identities as needed; relative paths alone do not solve external renames.
 
-Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1 to schema 2 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
+Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1 and 2 to schema 3 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
+
+Schema 3 adds `adjustments.geometry`: clockwise `quarterTurns`, two mirror flags, and an optional normalized bottom-left `crop` rectangle in the rotated/mirrored coordinate system. Older adjustments and presets decode with neutral geometry. Invalid crop bounds reject metadata decoding, preserving the existing file. Geometry edits use the existing adjustment undo records and autosave. Reusable color presets/copy/batch operations preserve each destination's geometry.
+
+`Renderer.render` applies geometry before color/effects. Preview applies the same source-pixel crop before downsampling and invalidates its bounded baselines when geometry changes. Detail regions use the resulting cropped image coordinate system; vignette is relative to that final frame. Interactive crop mode submits an uncropped adjustment snapshot while keeping the draft only in memory. Apply commits one adjustment; cancel/navigation discards it. Geometry transitions invalidate pending frames and reset Fit to prevent stale dimensions or sampling coordinates.
 
 Serialize writes through one store. Debounce slider updates, then flush on image transitions and normal termination. Write a temporary file on the same volume and atomically replace the metadata file. Preserve the last valid data if decoding, migration or saving fails. Handle termination/save completion explicitly rather than relying on a best-effort background task.
 
@@ -80,6 +93,7 @@ Store app-wide workspace registrations, security-scoped bookmarks if needed, and
 - Invalidate the preview generation on image/workspace changes so an old image can never replace the active photo. Publishing an intermediate setting for the same image is allowed during a drag; the last frame must match the final settings and normal preview resolution.
 - Deliver preview completions through the main run loop's common modes so mouse tracking does not defer them until release. Slider drag completion requests the normal-resolution refinement; it only groups undo history, not the application of settings.
 - Cache the active photo's decoded/resized baselines at at most two preview resolutions, plus their original images, histograms, and clipping overlays. Materialize baselines in half-float extended sRGB so later exposure/highlight adjustments retain values above display white. Invalidate these caches when the source URL/modification date changes. Export continues to render directly from full-resolution source data.
+- Keep only one visible detail crop in addition to the overview caches. Do not allocate full-source-size original, edited, mask, and clipping buffers solely to implement zoom. All detail frames must use the same adjustment snapshot as their overview.
 - Restore security-scoped access correctly when required by the chosen sandbox/distribution model.
 - Treat comparison as temporary UI state, separate from adjustments and undo history.
 

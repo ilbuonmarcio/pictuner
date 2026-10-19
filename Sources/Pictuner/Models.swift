@@ -32,7 +32,33 @@ struct Adjustments: Codable, Equatable, Sendable {
     var vignetteRadius = 0.65
     var vignetteSoftness = 0.5
     var selective = SelectiveColor()
+    var geometry = ImageGeometry()
     var isEdited: Bool { self != Adjustments() }
+
+    init() {}
+    private enum CodingKeys: String, CodingKey {
+        case exposure, brightness, contrast, highlights, shadows, temperature, tint, saturation, hue
+        case monochrome, sepia, vignette, vignetteRadius, vignetteSoftness, selective, geometry
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        exposure = try values.decode(Double.self, forKey: .exposure)
+        brightness = try values.decode(Double.self, forKey: .brightness)
+        contrast = try values.decode(Double.self, forKey: .contrast)
+        highlights = try values.decode(Double.self, forKey: .highlights)
+        shadows = try values.decode(Double.self, forKey: .shadows)
+        temperature = try values.decode(Double.self, forKey: .temperature)
+        tint = try values.decode(Double.self, forKey: .tint)
+        saturation = try values.decode(Double.self, forKey: .saturation)
+        hue = try values.decode(Double.self, forKey: .hue)
+        monochrome = try values.decode(Double.self, forKey: .monochrome)
+        sepia = try values.decode(Double.self, forKey: .sepia)
+        vignette = try values.decode(Double.self, forKey: .vignette)
+        vignetteRadius = try values.decode(Double.self, forKey: .vignetteRadius)
+        vignetteSoftness = try values.decode(Double.self, forKey: .vignetteSoftness)
+        selective = try values.decode(SelectiveColor.self, forKey: .selective)
+        geometry = try values.decodeIfPresent(ImageGeometry.self, forKey: .geometry) ?? ImageGeometry()
+    }
 }
 
 struct ImageSettings: Codable, Equatable, Sendable {
@@ -55,7 +81,7 @@ struct ImageSettings: Codable, Equatable, Sendable {
 }
 
 struct WorkspaceDocument: Codable, Sendable {
-    var schemaVersion = 2
+    var schemaVersion = 3
     var renderVersion = 1
     var workspaceID = UUID()
     var images: [String: ImageSettings] = [:]

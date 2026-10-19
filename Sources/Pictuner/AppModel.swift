@@ -11,10 +11,15 @@ final class AppModel: ObservableObject {
     @Published var folder = ""
     @Published var settings = ImageSettings()
     @Published var preview: PreviewResult?
+    @Published private(set) var viewport = PhotoViewport()
     @Published var showingOriginal = false
     @Published var showMask = false
     @Published var showClipping = false
     @Published var pickingColor = false
+    @Published private(set) var cropDraft: CropRegion?
+    @Published private(set) var cropAspect = CropAspect.free
+    var isCropping: Bool { cropDraft != nil }
+    var cropRatio: Double? { cropAspect.ratio(source: preview?.sourceSize ?? .zero) }
     @Published var isLoading = false
     @Published var isRendering = false
     @Published var previewError: String?
@@ -43,7 +48,11 @@ final class AppModel: ObservableObject {
     private var editedSinceSave = false
     private var sessionTouched = false
     private let supportDirectory: URL?
+    private var canvasSize = CGSize.zero
+    private var canvasBacking = 1.0
+    private var requestedDetailViewport: DetailViewport?
 
+    // Retain the established storage path so the branding correction preserves saved workspaces and presets.
     private var supportURL: URL {
         supportDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Pictuner", isDirectory: true)
     }
@@ -75,7 +84,7 @@ final class AppModel: ObservableObject {
         self.supportDirectory = supportDirectory
         let renderer = Renderer()
         previews = PreviewCoordinator { request in
-            try renderer.preview(url: request.url, adjustments: request.adjustments, longEdge: request.longEdge)
+            try renderer.preview(url: request.url, adjustments: request.adjustments, longEdge: request.longEdge, detailViewport: request.detailViewport)
         }
         previews.onResult = { [weak self] _, result, isLatest in
             guard let self else { return }
@@ -122,6 +131,7 @@ final class AppModel: ObservableObject {
         persistCatalog()
         if activeWorkspace == reference {
             workspaceRevision = UUID(); previews.invalidate(); isRendering = false
+            cropDraft = nil
             activeWorkspace = nil; store = nil; photos = []; selectedID = nil; selectedIDs = []; preview = nil
             if let next = workspaces.first { open(next) }
         }
@@ -130,6 +140,7 @@ final class AppModel: ObservableObject {
     func open(_ reference: WorkspaceReference) {
         guard flush() else { return }
         activeWorkspace = reference; folder = ""; photos = []; selectedID = nil; selectedIDs = []; preview = nil
+        cropDraft = nil
         settings = ImageSettings(); showingOriginal = false; previewError = nil; isLoading = true
         previews.invalidate(); isRendering = false
         let token = UUID(); workspaceRevision = token
@@ -172,8 +183,10 @@ final class AppModel: ObservableObject {
             store?.setLastImage(selectedID)
             scheduleSave()
         }
+        cropDraft = nil
         showingOriginal = false; pickingColor = false; showMask = false
         preview = nil; previewError = nil
+        viewport = PhotoViewport(); requestedDetailViewport = nil
         undoStack = []; redoStack = []; gestureStart = nil; updateUndoState()
         requestPreview()
     }
@@ -209,19 +222,22 @@ final class AppModel: ObservableObject {
     }
 
     func setAdjustments(_ value: Adjustments) {
-        guard canEdit, value != settings.adjustments else { return }
+        guard canEdit, !isCropping, value != settings.adjustments else { return }
         if gestureStart == nil, let id = selectedID { undoStack.append([id: settings.adjustments]); redoStack = [] }
+        if settings.adjustments.geometry != value.geometry { resetGeometryPreview() }
         settings.adjustments = value
         updateUndoState(); changed()
         requestPreview()
     }
 
     func undo() {
+        if isCropping { cancelCrop(); return }
         guard canEdit, let value = undoStack.popLast() else { return }
         redoStack.append(restoreAdjustments(value))
         updateUndoState()
     }
     func redo() {
+        if isCropping { cancelCrop(); return }
         guard canEdit, let value = redoStack.popLast() else { return }
         undoStack.append(restoreAdjustments(value))
         updateUndoState()
@@ -233,7 +249,10 @@ final class AppModel: ObservableObject {
             previous[id] = entry.adjustments
             entry.adjustments = value
             store?.update(entry, for: id)
-            if id == selectedID { settings = entry }
+            if id == selectedID {
+                if settings.adjustments.geometry != entry.adjustments.geometry { resetGeometryPreview() }
+                settings = entry
+            }
         }
         scheduleSave(); requestPreview()
         return previous
@@ -263,17 +282,26 @@ final class AppModel: ObservableObject {
         scheduleSave()
     }
     func savedSettings(for photo: Photo) -> ImageSettings { photo.id == selectedID ? settings : store?.settings(for: photo.id) ?? ImageSettings() }
-    func copyAdjustments() { copiedAdjustments = settings.adjustments; objectWillChange.send() }
-    func pasteAdjustments() { if let value = copiedAdjustments { setAdjustments(value) } }
+    // Framing belongs to each photo; reusable color edits leave it alone.
+    func applyColorAdjustments(_ value: Adjustments) {
+        var value = value; value.geometry = settings.adjustments.geometry
+        setAdjustments(value)
+    }
+    func copyAdjustments() {
+        var value = settings.adjustments; value.geometry = ImageGeometry()
+        copiedAdjustments = value; objectWillChange.send()
+    }
+    func pasteAdjustments() { if let value = copiedAdjustments { applyColorAdjustments(value) } }
 
     func applyToSelection() {
         guard canEdit else { return }
         var previous: [String: Adjustments] = [:]
         for id in selectedIDs where id != selectedID {
             var other = store?.settings(for: id) ?? ImageSettings()
-            guard other.adjustments != settings.adjustments else { continue }
+            var value = settings.adjustments; value.geometry = other.adjustments.geometry
+            guard other.adjustments != value else { continue }
             previous[id] = other.adjustments
-            other.adjustments = settings.adjustments
+            other.adjustments = value
             store?.update(other, for: id)
         }
         if !previous.isEmpty {
@@ -283,7 +311,12 @@ final class AppModel: ObservableObject {
 
     func sampleColor(at point: CGPoint) {
         guard let preview, !isRendering, !showingOriginal else { return }
-        let sample = Renderer.sample(preview.samplingImage, at: point)
+        let sample: (Double, Double, Double)
+        let bottomPoint = CGPoint(x: point.x, y: 1-point.y)
+        if let detail = preview.detail, detail.region.contains(bottomPoint) {
+            let localPoint = CGPoint(x: (point.x-detail.region.minX)/detail.region.width, y: 1-(bottomPoint.y-detail.region.minY)/detail.region.height)
+            sample = Renderer.sample(detail.samplingImage, at: localPoint)
+        } else { sample = Renderer.sample(preview.samplingImage, at: point) }
         var a = settings.adjustments
         a.selective.enabled = true
         a.selective.hue = sample.0; a.selective.saturation = sample.1; a.selective.brightness = sample.2
@@ -292,7 +325,8 @@ final class AppModel: ObservableObject {
 
     func savePreset(name: String) {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        presets.append(UserPreset(name: name, adjustments: settings.adjustments))
+        var value = settings.adjustments; value.geometry = ImageGeometry()
+        presets.append(UserPreset(name: name, adjustments: value))
         do {
             try FileManager.default.createDirectory(at: supportURL, withIntermediateDirectories: true)
             try JSONEncoder().encode(presets).write(to: supportURL.appendingPathComponent("presets.json"), options: .atomic)
@@ -333,7 +367,91 @@ final class AppModel: ObservableObject {
     func requestPreview() {
         guard let photo = activePhoto else { isRendering = false; return }
         isRendering = true
-        previews.request(PreviewRequest(url: photo.url, adjustments: settings.adjustments, longEdge: gestureStart == nil ? 1800 : 1000))
+        requestedDetailViewport = desiredDetailViewport
+        var value = settings.adjustments
+        if isCropping { value.geometry.crop = nil }
+        previews.request(PreviewRequest(url: photo.url, adjustments: value, longEdge: gestureStart == nil ? 1800 : 1000, detailViewport: requestedDetailViewport))
+    }
+
+    private var desiredDetailViewport: DetailViewport? {
+        guard !isCropping, let size = preview?.sourceSize else { return nil }
+        return viewport.detailViewport(source: size, canvas: canvasSize, backing: canvasBacking)
+    }
+
+    func updateViewport(_ value: PhotoViewport, canvas: CGSize, backing: Double) {
+        if viewport != value { viewport = value }
+        canvasSize = canvas; canvasBacking = backing
+        if desiredDetailViewport != requestedDetailViewport { requestPreview() }
+    }
+
+    func updateCanvasGeometry(_ canvas: CGSize, backing: Double) {
+        var next = viewport
+        if let size = preview?.sourceSize { next.constrain(source: size, canvas: canvas, backing: backing) }
+        updateViewport(next, canvas: canvas, backing: backing)
+    }
+
+    func setZoom(_ scale: Double?) {
+        guard !isCropping, let size = preview?.sourceSize else { return }
+        var next = viewport
+        next.setScale(scale, source: size, canvas: canvasSize, backing: canvasBacking)
+        updateViewport(next, canvas: canvasSize, backing: canvasBacking)
+    }
+
+    func zoomBy(_ factor: Double) {
+        guard let size = preview?.sourceSize else { return }
+        setZoom(viewport.resolvedScale(source: size, canvas: canvasSize, backing: canvasBacking)*factor)
+    }
+
+    private func resetGeometryPreview() {
+        previews.invalidate()
+        preview = nil; previewError = nil
+        viewport = PhotoViewport(); requestedDetailViewport = nil
+        showingOriginal = false; pickingColor = false; showMask = false
+    }
+
+    func rotate(clockwise: Bool) {
+        guard !isCropping else { return }
+        var value = settings.adjustments; value.geometry.rotate(clockwise: clockwise)
+        setAdjustments(value)
+    }
+    func flip(horizontal: Bool) {
+        guard !isCropping else { return }
+        var value = settings.adjustments; value.geometry.flip(horizontal: horizontal)
+        setAdjustments(value)
+    }
+    func beginCrop() {
+        guard canEdit, preview != nil, !isCropping else { return }
+        cropDraft = settings.adjustments.geometry.crop ?? .full
+        cropAspect = .free
+        resetGeometryPreview(); requestPreview()
+    }
+    func updateCrop(_ value: CropRegion) { guard isCropping else { return }; cropDraft = value }
+    func setCropAspect(_ value: CropAspect) {
+        cropAspect = value
+        if let ratio = cropRatio, let size = preview?.sourceSize, let draft = cropDraft {
+            cropDraft = draft.fitted(aspect: ratio, source: size)
+        }
+    }
+    func resetCropDraft() {
+        cropDraft = .full
+        setCropAspect(cropAspect)
+    }
+    func applyCrop() {
+        guard let draft = cropDraft, preview != nil else { return }
+        cropDraft = nil
+        var value = settings.adjustments
+        value.geometry.crop = draft == .full ? nil : draft
+        resetGeometryPreview()
+        if value != settings.adjustments { setAdjustments(value) } else { requestPreview() }
+    }
+    func cancelCrop() {
+        guard isCropping else { return }
+        cropDraft = nil
+        resetGeometryPreview(); requestPreview()
+    }
+    func clearCrop() {
+        var value = settings.adjustments; value.geometry.crop = nil
+        setAdjustments(value)
     }
 
     func exportItems() -> [ExportItem] {
@@ -350,11 +468,12 @@ final class AppModel: ObservableObject {
     }
 
     func startExport() {
+        guard !isCropping else { return }
         guard flush() else { return }
         let items = exportItems()
-        guard !items.isEmpty else { errorMessage = "No photos are marked for export in this selection. Use Include in Export on the photos you want to export."; return }
+        guard !items.isEmpty else { errorMessage = "No marked photos in this selection."; return }
         let panel = NSOpenPanel()
-        panel.title = "Choose Export Folder"; panel.prompt = "Export Copies"
+        panel.title = "Export"; panel.prompt = "Export"
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         let roots = workspaces.map(\.url)
@@ -369,8 +488,11 @@ final class AppModel: ObservableObject {
             }
             DispatchQueue.main.async {
                 self.exporting = false
-                let heading = cancellation.cancelled ? "Export cancelled." : "Export complete."
-                self.exportSummary = "\(heading) \(result.completed) exported, \(result.skipped) skipped, \(result.errors.count) failed." + (result.errors.isEmpty ? "" : "\n\n" + result.errors.prefix(8).joined(separator: "\n"))
+                var counts = ["\(result.completed) exported"]
+                if result.skipped > 0 { counts.append("\(result.skipped) skipped") }
+                if !result.errors.isEmpty { counts.append("\(result.errors.count) failed") }
+                let heading = cancellation.cancelled ? "Export cancelled.\n" : ""
+                self.exportSummary = heading + counts.joined(separator: ", ") + "." + (result.errors.isEmpty ? "" : "\n\n" + result.errors.prefix(8).joined(separator: "\n"))
             }
         }
     }

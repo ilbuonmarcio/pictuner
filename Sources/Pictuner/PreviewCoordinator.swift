@@ -4,6 +4,7 @@ struct PreviewRequest: Equatable {
     let url: URL
     let adjustments: Adjustments
     let longEdge: Double
+    var detailViewport: DetailViewport? = nil
 }
 
 /// One render in flight and one replaceable pending value. Continuous input never postpones

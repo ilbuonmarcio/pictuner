@@ -4,12 +4,13 @@ struct ExportSheet: View {
     @EnvironmentObject var model: AppModel
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Export your photos").font(.system(size: 23, weight: .semibold))
-                Text("Finished copies. Untouched originals.").foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                Text("Export").font(.system(size: 20, weight: .semibold))
+                Spacer()
+                Text("\(model.exportItems().count) \(model.exportItems().count == 1 ? "photo" : "photos")").foregroundStyle(.secondary)
             }
             Form {
-                Picker("Images", selection: $model.exportOptions.scope) { ForEach(ExportScope.allCases, id: \.self) { Text($0.rawValue) } }
+                Picker("Photos", selection: $model.exportOptions.scope) { ForEach(ExportScope.allCases, id: \.self) { Text($0.rawValue) } }
                 Picker("Format", selection: $model.exportOptions.format) { ForEach(OutputFormat.allCases, id: \.self) { Text($0.rawValue) } }
                 if model.exportOptions.format == .jpeg {
                     HStack { Text("Quality"); Slider(value: $model.exportOptions.quality, in: 0.3...1); Text("\(Int(model.exportOptions.quality*100))%").monospacedDigit().frame(width: 42) }
@@ -23,14 +24,15 @@ struct ExportSheet: View {
                 Toggle("Preserve subfolder structure", isOn: $model.exportOptions.preserveFolders)
                 Picker("Existing filenames", selection: $model.exportOptions.collision) { ForEach(CollisionPolicy.allCases, id: \.self) { Text($0.rawValue) } }
             }.formStyle(.grouped).frame(height: 275)
-            Text("\(model.exportItems().count) marked \(model.exportItems().count == 1 ? "photo" : "photos") included. Unmarked and rejected photos are excluded. Exports use sRGB and omit source EXIF/GPS. Choose a destination outside your workspaces.").font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text("sRGB · Metadata excluded").font(.system(size: 11)).foregroundStyle(.secondary)
+                .help("Source EXIF and GPS metadata are not included.")
             if model.exportItems().isEmpty {
-                Text("Mark photos with Include in Export before exporting.").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("Mark photos using Include in Export.").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             HStack {
                 Button("Cancel") { model.showExportSheet = false }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Choose Folder & Export…", action: model.startExport).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(model.exportItems().isEmpty)
+                Button("Export…", action: model.startExport).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(model.exportItems().isEmpty)
             }
         }.padding(26).frame(width: 470)
     }

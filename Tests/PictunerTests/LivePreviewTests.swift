@@ -95,11 +95,14 @@ final class LivePreviewTests: XCTestCase {
         model.open(WorkspaceReference(path: root.path))
         for _ in 0..<200 where model.preview == nil { try await Task.sleep(for: .milliseconds(20)) }
         XCTAssertNotNil(model.preview)
+        model.updateViewport(PhotoViewport(scale: 1), canvas: CGSize(width: 300, height: 200), backing: 2)
+        for _ in 0..<200 where model.isRendering { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertNotNil(model.preview?.detail)
         var frameCount = 0
         var colors = Set<UInt8>()
         let observation = model.$preview.compactMap { $0 }.dropFirst().sink { preview in
             frameCount += 1
-            let bytes = preview.edited.dataProvider?.data as Data?
+            let bytes = (preview.detail?.edited ?? preview.edited).dataProvider?.data as Data?
             if let first = bytes?.first { colors.insert(first) }
         }
         defer { observation.cancel() }

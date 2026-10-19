@@ -7,7 +7,7 @@ struct InspectorView: View {
     @State private var namingPreset = false
     var body: some View {
         VStack(spacing: 0) {
-            HStack { Text("EDIT").font(.system(size: 10, weight: .semibold)).tracking(1.4).foregroundStyle(.secondary); Spacer(); Button("Reset") { model.setAdjustments(Adjustments()) }.buttonStyle(.plain).font(.system(size: 11)).disabled(!model.canEdit) }.padding(18)
+            HStack { Spacer(); Button("Reset") { model.setAdjustments(Adjustments()) }.buttonStyle(.plain).font(.system(size: 11)).disabled(!model.canEdit || model.isCropping) }.padding(18)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     histogram
@@ -18,7 +18,7 @@ struct InspectorView: View {
                     .buttonStyle(.bordered)
                     .tint(model.settings.exportReady ? .green : .secondary)
                     .disabled(!model.canEdit)
-                    .help("Only marked photos are exported. Shortcut: ⇧⌘G.")
+                    .help("Include in Export · ⇧⌘G")
                     .accessibilityValue(model.settings.exportReady ? "Marked for export" : "Not marked for export")
                     HStack {
                         Button(action: model.toggleFavorite) { Label("Favorite", systemImage: model.settings.favorite ? "star.fill" : "star") }.tint(model.settings.favorite ? .yellow : .secondary)
@@ -26,6 +26,7 @@ struct InspectorView: View {
                         Button(action: model.toggleRejected) { Label("Reject", systemImage: model.settings.rejected ? "xmark.circle.fill" : "xmark.circle") }.tint(model.settings.rejected ? .red : .secondary)
                     }.font(.system(size: 11)).buttonStyle(.plain).disabled(!model.canEdit)
                     Divider()
+                    transform
                     section("Light", icon: "sun.max") {
                         adjustment("Exposure", \.exposure, -4...4, unit: " EV")
                         adjustment("Brightness", \.brightness, -0.3...0.3)
@@ -48,11 +49,10 @@ struct InspectorView: View {
                         }
                         adjustment("Black & white", \.monochrome, 0...1)
                         adjustment("Sepia", \.sepia, 0...1)
-                        Menu("Saved presets") {
-                            if model.presets.isEmpty { Text("No saved presets yet") }
-                            ForEach(model.presets) { preset in Button(preset.name) { model.setAdjustments(preset.adjustments) } }
-                        }
-                        Button("Save Current as Preset…") { namingPreset = true }.font(.system(size: 11))
+                        Menu("Presets") {
+                            ForEach(model.presets) { preset in Button(preset.name) { model.applyColorAdjustments(preset.adjustments) } }
+                        }.disabled(model.presets.isEmpty)
+                        Button("Save Preset…") { namingPreset = true }.font(.system(size: 11))
                     }
                     section("Vignette", icon: "circle.dotted.circle") {
                         adjustment("Strength", \.vignette, 0...1)
@@ -61,17 +61,16 @@ struct InspectorView: View {
                     }
                     Divider()
                     VStack(spacing: 8) {
-                        Button("Mark Selected for Export") { model.setExportReady(true, for: model.selectedIDs) }
-                            .disabled(!model.canEdit || model.selectedIDs.isEmpty)
-                        Button("Unmark Selected for Export") { model.setExportReady(false, for: model.selectedIDs) }
-                            .disabled(!model.canEdit || model.selectedIDs.isEmpty)
+                        if model.selectedCount > 1 {
+                            Button("Mark Selected for Export") { model.setExportReady(true, for: model.selectedIDs) }.disabled(!model.canEdit)
+                            Button("Unmark Selected for Export") { model.setExportReady(false, for: model.selectedIDs) }.disabled(!model.canEdit)
+                            Button("Apply Edits to \(model.selectedCount) Selected", action: model.applyToSelection).disabled(!model.canEdit)
+                        }
                         HStack {
                             Button("Copy Edits", action: model.copyAdjustments)
                             Button("Paste Edits", action: model.pasteAdjustments).disabled(!model.hasCopiedAdjustments)
                         }
-                        Button("Apply to \(model.selectedCount) Selected", action: model.applyToSelection).disabled(model.selectedCount < 2)
-                        Text("⌘-click thumbnails to select more photos.").font(.system(size: 10)).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity)
+                    }.frame(maxWidth: .infinity).disabled(model.isCropping)
                 }.padding(.horizontal, 18).padding(.bottom, 24)
                     .disabled(model.activePhoto == nil)
             }
@@ -80,7 +79,40 @@ struct InspectorView: View {
                 TextField("Preset name", text: $presetName)
                 Button("Cancel", role: .cancel) { presetName = "" }
                 Button("Save") { model.savePreset(name: presetName); presetName = "" }
-            } message: { Text("Save these adjustments for another photo.") }
+            }
+    }
+
+    private var transform: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Transform", systemImage: "crop.rotate").font(.system(size: 12, weight: .semibold))
+            HStack(spacing: 12) {
+                Button(action: model.beginCrop) { Image(systemName: "crop") }.help("Crop").accessibilityLabel("Crop")
+                    .disabled(model.preview == nil || model.isCropping)
+                Spacer()
+                Button { model.rotate(clockwise: false) } label: { Image(systemName: "rotate.left") }.help("Rotate left 90°").accessibilityLabel("Rotate left 90 degrees")
+                    .disabled(model.isCropping)
+                Button { model.rotate(clockwise: true) } label: { Image(systemName: "rotate.right") }.help("Rotate right 90°").accessibilityLabel("Rotate right 90 degrees")
+                    .disabled(model.isCropping)
+                Divider().frame(height: 16)
+                Button { model.flip(horizontal: true) } label: { Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right") }.help("Flip horizontally").accessibilityLabel("Flip horizontally")
+                    .disabled(model.isCropping)
+                Button { model.flip(horizontal: false) } label: { Image(systemName: "arrow.up.and.down.righttriangle.up.righttriangle.down") }.help("Flip vertically").accessibilityLabel("Flip vertically")
+                    .disabled(model.isCropping)
+            }.buttonStyle(.borderless).font(.system(size: 15))
+            if model.isCropping {
+                Picker("Aspect", selection: Binding(get: { model.cropAspect }, set: model.setCropAspect)) {
+                    ForEach(CropAspect.allCases) { Text($0.rawValue).tag($0) }
+                }.disabled(model.preview == nil)
+                HStack {
+                    Button("Reset", action: model.resetCropDraft).help("Reset crop bounds").disabled(model.preview == nil)
+                    Spacer()
+                    Button("Cancel", action: model.cancelCrop)
+                    Button("Apply", action: model.applyCrop).buttonStyle(.borderedProminent).disabled(model.preview == nil)
+                }.controlSize(.small)
+            } else if model.settings.adjustments.geometry.crop != nil {
+                Button("Remove Crop", action: model.clearCrop).font(.system(size: 11))
+            }
+        }.disabled(!model.canEdit)
     }
 
     private var histogram: some View {
@@ -99,7 +131,7 @@ struct InspectorView: View {
     private func section<C: View>(_ name: String, icon: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(name, systemImage: icon).font(.system(size: 12, weight: .semibold))
-            content().disabled(!model.canEdit)
+            content().disabled(!model.canEdit || model.isCropping)
         }
     }
     private func adjustment(_ label: String, _ key: WritableKeyPath<Adjustments, Double>, _ range: ClosedRange<Double>, unit: String = "", digits: Int = 2) -> some View {
@@ -109,11 +141,13 @@ struct InspectorView: View {
         EditSlider(title: label, value: model.selectiveBinding(key), range: range, onEditing: model.editingGesture)
     }
     private func presetButton(_ name: String, make: @escaping () -> Adjustments) -> some View {
-        Button(name) { model.setAdjustments(make()) }.font(.system(size: 10)).frame(maxWidth: .infinity)
+        Button(name) { model.applyColorAdjustments(make()) }.font(.system(size: 10)).frame(maxWidth: .infinity)
     }
     private var selectiveColor: some View {
         section("Selective Color", icon: "eyedropper.halffull") {
-            Toggle("Enable color isolation", isOn: Binding(get: { model.settings.adjustments.selective.enabled }, set: { value in var a = model.settings.adjustments; a.selective.enabled = value; model.setAdjustments(a) })).font(.system(size: 11)).toggleStyle(.checkbox)
+            Toggle("Enabled", isOn: Binding(get: { model.settings.adjustments.selective.enabled }, set: { value in var a = model.settings.adjustments; a.selective.enabled = value; model.setAdjustments(a) })).font(.system(size: 11)).toggleStyle(.checkbox)
+                .accessibilityLabel("Selective color")
+                .help("Selects matching colors throughout the image.")
             HStack {
                 Circle().fill(Color(hue: model.settings.adjustments.selective.hue, saturation: model.settings.adjustments.selective.saturation, brightness: model.settings.adjustments.selective.brightness)).frame(width: 21, height: 21).overlay(Circle().stroke(.white.opacity(0.2)))
                 Button(model.pickingColor ? "Cancel Picking" : "Pick Color…") { model.pickingColor.toggle(); model.showMask = false; model.showingOriginal = false }.disabled(model.preview == nil || model.isRendering)
@@ -127,8 +161,7 @@ struct InspectorView: View {
                 selectiveSlider("Selected saturation", \.selectedSaturation, 0...2)
                 selectiveSlider("Selected brightness", \.selectedBrightness, -2...2)
                 selectiveSlider("Other colors' saturation", \.outsideSaturation, 0...1)
-                Toggle("Preview color mask", isOn: $model.showMask).font(.system(size: 11)).toggleStyle(.checkbox)
-                Text("Similar colors anywhere in the photo are included.").font(.system(size: 10)).foregroundStyle(.secondary)
+                Toggle("Show mask", isOn: $model.showMask).font(.system(size: 11)).toggleStyle(.checkbox)
             }
         }
     }
