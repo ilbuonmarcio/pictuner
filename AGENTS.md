@@ -26,7 +26,7 @@ Read `docs/SPEC.md` and `docs/ARCHITECTURE.md` before implementing features. Kee
 
 ## Working practices
 
-- Keep the right inspector free of vertical scrolling at the minimum window size. Show all adjustments in a wider, two-column inspector with a fixed histogram; do not use tabs, collapsed groups, or conditional hiding of selective-color sliders; keep photo/transform actions beside the preview and crop controls contextual.
+- Keep the right inspector free of vertical scrolling at the minimum window size. Show all adjustments in a wider, two-column inspector with a fixed histogram; do not use tabs, collapsed groups, or conditional hiding of selective-color sliders; keep photo/transform actions beside the preview and crop controls contextual. When Workspaces is hidden, dock the filmstrip beneath the right inspector and reclaim its height for the preview; restore it below the preview when Workspaces is shown. Use compact panel spacing when needed without shrinking slider rows or hiding controls.
 - Keep product copy brief and functional. Do not add slogans, demo/sample messaging, repeated promises about originals, or always-visible tutorials. Use tooltips for shortcuts and show guidance only when it resolves an empty/error state or affects a user's decision. Hide inapplicable batch actions and routine successful-save chatter.
 
 - Build the local app with `./scripts/build-app.sh` (or `release`); run `./scripts/test.sh` for regression checks. Graphics tests require macOS graphics-service access. Set `PICTUNER_RAW_FIXTURE` to a real camera RAW file to include RAW integration coverage.

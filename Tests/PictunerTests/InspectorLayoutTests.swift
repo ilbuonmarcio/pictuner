@@ -8,16 +8,20 @@ final class InspectorLayoutTests: XCTestCase {
     @MainActor func testAllAdjustmentsFitTogetherWithoutScrollingWithSelectiveOnOrOff() {
         let model = AppModel(restoringSession: false)
         model.presets = [UserPreset(name: "A custom preset with a long name", adjustments: Adjustments())]
-        for availableHeight: CGFloat in [InspectorView.minimumHeight, 1000] {
-            let histogramHeight = InspectorView.histogramHeight(for: availableHeight)
-            for enabled in [false, true] {
-                model.settings.adjustments.selective.enabled = enabled
-                let view = NSHostingView(rootView: InspectorView(histogramHeight: histogramHeight).environmentObject(model).frame(width: InspectorView.width))
-                view.layoutSubtreeIfNeeded()
-                let size = view.fittingSize
-                XCTAssertGreaterThan(size.height, 200)
-                XCTAssertLessThanOrEqual(size.height, availableHeight, "All controls with a \(histogramHeight)-point histogram require \(size.height) points; they must fit without scrolling")
-                XCTAssertEqual(size.width, InspectorView.width, accuracy: 0.5)
+        for columnHeight: CGFloat in [InspectorView.minimumHeight, 1000, 1100] {
+            let histogramHeight = InspectorView.histogramHeight(for: columnHeight)
+            for filmstripOnRight in [false, true] {
+                let availableHeight = columnHeight - (filmstripOnRight ? Filmstrip.height+1 : 0)
+                let compact = InspectorView.needsCompactSpacing(height: availableHeight, histogramHeight: histogramHeight)
+                for enabled in [false, true] {
+                    model.settings.adjustments.selective.enabled = enabled
+                    let view = NSHostingView(rootView: InspectorView(histogramHeight: histogramHeight, compact: compact).environmentObject(model).frame(width: InspectorView.width))
+                    view.layoutSubtreeIfNeeded()
+                    let size = view.fittingSize
+                    XCTAssertGreaterThan(size.height, 200)
+                    XCTAssertLessThanOrEqual(size.height, availableHeight, "All controls with a \(histogramHeight)-point histogram require \(size.height) points; they must fit without scrolling")
+                    XCTAssertEqual(size.width, InspectorView.width, accuracy: 0.5)
+                }
             }
         }
     }

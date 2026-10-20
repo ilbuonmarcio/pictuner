@@ -12,7 +12,7 @@ Browse your photos, tune their look, and export the keepers. PicTuner works dire
 
 ## Features
 
-- **Folder workspaces.** Add a folder and browse its images and nested folders, with a filmstrip, arrow-key navigation, favorites, and rejection flags. Hide the workspace sidebar when you want more room.
+- **Folder workspaces.** Add a folder and browse its images and nested folders, with a filmstrip, arrow-key navigation, favorites, and rejection flags. Hide the workspace sidebar to move the filmstrip beneath the right inspector and give portrait photos more preview space.
 - **Live adjustments.** Change exposure, contrast, highlights, shadows, white balance, hue, saturation, and vibrance while the preview updates as you drag. The two-column inspector keeps all adjustments visible without scrolling.
 - **Detail and effects.** Tune clarity, texture, sharpening, noise reduction, black & white, sepia, vignette, glow, film grain, and shadow/highlight color grading. Each slider has its own reset.
 - **Selective color.** Pick a color from the photo, accentuate similar tones, and desaturate the rest. Adjust the matching range and softness, or inspect the selection mask.

@@ -44,8 +44,10 @@ struct ContentView: View {
                 if !model.distractionFree {
                     Divider()
                     PhotoToolbar()
-                    Divider()
-                    Filmstrip().frame(height: 118)
+                    if workspaceSidebarVisible {
+                        Divider()
+                        Filmstrip().frame(height: Filmstrip.height)
+                    }
                     Divider()
                     statusBar
                 }
@@ -53,7 +55,17 @@ struct ContentView: View {
             if !model.distractionFree {
                 Divider()
                 GeometryReader { geometry in
-                    InspectorView(histogramHeight: InspectorView.histogramHeight(for: geometry.size.height))
+                    let histogramHeight = InspectorView.histogramHeight(for: geometry.size.height)
+                    let inspectorHeight = geometry.size.height - (workspaceSidebarVisible ? 0 : Filmstrip.height+1)
+                    VStack(spacing: 0) {
+                        InspectorView(histogramHeight: histogramHeight,
+                                      compact: InspectorView.needsCompactSpacing(height: inspectorHeight, histogramHeight: histogramHeight))
+                            .frame(maxHeight: .infinity)
+                        if !workspaceSidebarVisible {
+                            Divider()
+                            Filmstrip().frame(height: Filmstrip.height)
+                        }
+                    }
                 }.frame(width: InspectorView.width)
             }
         }
@@ -276,7 +288,8 @@ private struct FolderBranch: View {
     }
 }
 
-private struct Filmstrip: View {
+struct Filmstrip: View {
+    static let height: CGFloat = 118
     @EnvironmentObject var model: AppModel
     var body: some View {
         ScrollViewReader { proxy in
@@ -307,6 +320,7 @@ private struct Filmstrip: View {
                     }
                 }.padding(.horizontal, 16).padding(.vertical, 12)
             }.scrollIndicators(.hidden)
+                .onAppear { if let id = model.selectedID { proxy.scrollTo(id, anchor: .center) } }
                 .onChange(of: model.selectedID) { _, id in if let id { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id, anchor: .center) } } }
         }
     }

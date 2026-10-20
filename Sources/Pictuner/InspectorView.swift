@@ -5,6 +5,7 @@ struct InspectorView: View {
     static let width: CGFloat = 720
     static let minimumHeight: CGFloat = 900
     var histogramHeight: CGFloat = 168
+    var compact = false
     @State private var histogramRGB = true
     @State private var presetName = ""
     @State private var namingPreset = false
@@ -14,7 +15,7 @@ struct InspectorView: View {
             histogram.padding(12)
             Divider()
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: compact ? 8 : 12) {
                     panel("Light", icon: "sun.max") { light }
                     panel("Effects", icon: "camera.filters") {
                         looks
@@ -29,12 +30,12 @@ struct InspectorView: View {
                         adjustment("Grain size", \.grainSize, 0.5...8, unit: " px", digits: 1)
                     }
                 }.frame(maxWidth: .infinity, alignment: .topLeading)
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: compact ? 8 : 12) {
                     panel("Color", icon: "paintpalette") { color }
                     panel("Selective Color", icon: "eyedropper") { selectiveColor }
                 }.frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(12)
+            .padding(compact ? 8 : 12)
             .disabled(!model.canEdit || model.isCropping)
             Spacer(minLength: 0)
             Divider()
@@ -109,6 +110,10 @@ struct InspectorView: View {
         availableHeight >= 1000 ? 168 : 112
     }
 
+    static func needsCompactSpacing(height: CGFloat, histogramHeight: CGFloat) -> Bool {
+        height < minimumHeight + histogramHeight - 112
+    }
+
     private func panel<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 7) {
@@ -116,10 +121,11 @@ struct InspectorView: View {
                 Text(title)
                 Spacer(minLength: 0)
             }.font(.system(size: 12, weight: .semibold))
-                .padding(.horizontal, 10).padding(.vertical, 8)
+                .padding(.horizontal, 10).padding(.vertical, compact ? 4 : 8)
                 .background(.white.opacity(0.045))
             Divider()
-            VStack(alignment: .leading, spacing: 4) { content() }.padding(10)
+            VStack(alignment: .leading, spacing: compact ? 2 : 4) { content() }
+                .padding(.horizontal, 10).padding(.vertical, compact ? 6 : 10)
         }
         .background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 9))
         .clipShape(RoundedRectangle(cornerRadius: 9))

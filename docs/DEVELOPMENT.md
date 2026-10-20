@@ -4,6 +4,8 @@ Updated: 2026-10-20. This is a local development app, not a signed/notarized dis
 
 ## Implemented
 
+- Hiding Workspaces moves the filmstrip below the right inspector, reclaiming its 118-point height plus divider for the photo preview. Showing Workspaces restores it below the preview; the picker scrolls to the active photo when relocated. Photo/crop controls stay beside the preview. Compact card spacing keeps all inspector controls visible at the existing minimum size, retaining slider/label sizes and histogram height.
+
 - Four built-in export recipes: Web Page (JPEG 80%), Instagram (JPEG 100%), Full Resolution (JPEG 95%), and Lossless (16-bit PNG), all at full rendered resolution. Recipes preserve photo framing, export approval/scope and file-handling choices; manual encoding changes show Custom. PNG bit depth is independently selectable and recipe/field Reset buttons remain available. 16-bit PNG is encoded from the full rendered source without the 8-bit preview conversion.
 
 - Straighten in the crop editor: live −15°…+15° angle slider with Reset and a drawable horizon guide, automatic edge trimming, one Apply/Cancel/undo operation for crop plus angle, and schema 5/render version 3 migration. Source-resolution geometry is shared by original, preview/detail, histogram, sampling, and export; presets/copy/batch preserve destination framing.
@@ -59,6 +61,8 @@ Updated: 2026-10-20. This is a local development app, not a signed/notarized dis
 - No bokeh, spatial masks, brushes, or network services.
 
 ## Validation record
+
+Filmstrip relocation (2026-10-20): all 67 tests pass with the Nikon RAW fixture. Expanded inspector layout coverage verifies both placements at 900/1000/1100-point column heights, selective color on/off and populated presets. The app build passed. Native inspection with a portrait photo confirmed picker relocation, all controls fitting at minimum 1340 × 900 content size, restoration when showing Workspaces, and selected-photo/100% zoom retention through sidebar and distraction-free toggles.
 
 Export-recipe validation (2026-10-20): all 67 tests pass with the Nikon RAW fixture, including five recipe tests. Coverage verifies recipe/manual/reset behavior, preserved selection/file policies and export approval, JPEG/PNG signatures and full cropped/oriented dimensions, sRGB and excluded GPS, source-byte preservation, and native sheet sizing. A 16-bit gradient retains more than 256 red levels and decoded PNG samples match the rendered 16-bit image. The real Nikon RAW also exports to a full-resolution 16-bit PNG without source changes. Native UI inspection verified the recipe menu and PNG depth controls. Instagram uses full-resolution JPEG 100%; current official dimension guidance could not be retrieved reliably, so no platform-size or output-quality guarantee is encoded.
 
