@@ -14,6 +14,15 @@ struct PreviewCanvas: NSViewRepresentable {
     let showGrid: Bool
     let crop: CropRegion?
     let cropRatio: Double?
+    let originalImage: CGImage?
+    let originalDetail: CGImage?
+    let originalClipping: CGImage?
+    let originalDetailClipping: CGImage?
+    let wipe: Double?
+    let wipeChanged: (Double) -> Void
+    let leveling: Bool
+    let horizonChanged: (Double) -> Void
+    let escape: () -> Void
     let cropChanged: (CropRegion) -> Void
     let cropFinished: (Bool) -> Void
     let viewportChanged: (PhotoViewport, CGSize, Double) -> Void
@@ -30,6 +39,7 @@ struct PreviewCanvas: NSViewRepresentable {
     func updateNSView(_ view: PhotoCanvas, context: Context) {
         if view.identity != identity {
             view.identity = identity
+            view.cancelDrags()
             if identity != nil {
                 DispatchQueue.main.async { [weak view] in
                     guard let view else { return }
@@ -40,6 +50,12 @@ struct PreviewCanvas: NSViewRepresentable {
         view.image = image; view.clipping = clipping
         view.detailImage = detailImage; view.detailClipping = detailClipping; view.detailRegion = detailRegion
         view.sourceSize = sourceSize; view.viewport = viewport; view.showGrid = showGrid
+        view.originalImage = originalImage; view.originalDetail = originalDetail
+        view.originalClipping = originalClipping; view.originalDetailClipping = originalDetailClipping
+        if view.wipe != wipe || view.leveling != leveling { view.window?.invalidateCursorRects(for: view) }
+        view.wipe = wipe; view.wipeChanged = wipeChanged
+        view.leveling = leveling; view.horizonChanged = horizonChanged; view.escape = escape
+        if !leveling { view.horizonLine = nil }
         if (view.crop == nil) != (crop == nil) {
             view.window?.invalidateCursorRects(for: view)
             if crop != nil {
@@ -70,6 +86,17 @@ final class PhotoCanvas: NSView {
     var viewport = PhotoViewport()
     var picking = false
     var showGrid = false
+    var originalImage: CGImage?
+    var originalDetail: CGImage?
+    var originalClipping: CGImage?
+    var originalDetailClipping: CGImage?
+    var wipe: Double?
+    var wipeChanged: ((Double) -> Void)?
+    var leveling = false
+    var horizonChanged: ((Double) -> Void)?
+    var escape: (() -> Void)?
+    var horizonLine: (CGPoint, CGPoint)?
+    private var draggingWipe = false
     var crop: CropRegion?
     var cropRatio: Double?
     var cropChanged: ((CropRegion) -> Void)?
@@ -124,7 +151,8 @@ final class PhotoCanvas: NSView {
         }
     }
     deinit { NotificationCenter.default.removeObserver(self) }
-    @objc private func resetComparison() { compare?(false); dragPoint = nil }
+    func cancelDrags() { dragPoint = nil; cropDrag = nil; draggingWipe = false; horizonLine = nil }
+    @objc private func resetComparison() { compare?(false); cancelDrags() }
     override func resignFirstResponder() -> Bool { compare?(false); return super.resignFirstResponder() }
 
     var imageRect: CGRect { viewport.imageRect(source: sourceSize, canvas: bounds.size, backing: backing) }
@@ -157,8 +185,68 @@ final class PhotoCanvas: NSView {
             if let detailClipping { context.draw(detailClipping, in: detailRect) }
             context.restoreGState()
         }
+        if let wipe, let originalImage {
+            context.saveGState()
+            let visible = comparisonRect
+            context.clip(to: CGRect(x: visible.minX, y: visible.minY, width: visible.width*wipe, height: visible.height))
+            context.draw(originalImage, in: imageRect)
+            if let originalClipping { context.draw(originalClipping, in: imageRect) }
+            if let originalDetail {
+                context.saveGState(); context.clip(to: detailRect)
+                context.draw(originalDetail, in: detailRect)
+                if let originalDetailClipping { context.draw(originalDetailClipping, in: detailRect) }
+                context.restoreGState()
+            }
+            context.restoreGState()
+        }
         if let crop { drawCrop(crop, context: context) }
         else if showGrid { drawCompositionGrid(context: context) }
+        if wipe != nil { drawWipe(context: context) }
+        if let (start, end) = horizonLine {
+            context.saveGState()
+            context.clip(to: imageRect)
+            context.move(to: start); context.addLine(to: end)
+            context.setStrokeColor(NSColor.black.cgColor); context.setLineWidth(4); context.strokePath()
+            context.move(to: start); context.addLine(to: end)
+            context.setStrokeColor(NSColor.systemYellow.cgColor); context.setLineWidth(2); context.strokePath()
+            for point in [start, end] { context.setFillColor(NSColor.white.cgColor); context.fillEllipse(in: CGRect(x: point.x-4, y: point.y-4, width: 8, height: 8)) }
+            context.restoreGState()
+        }
+    }
+
+    var comparisonRect: CGRect { imageRect.intersection(bounds) }
+    var wipeX: Double { comparisonRect.minX+comparisonRect.width*(wipe ?? 0.5) }
+    func moveWipe(to point: CGPoint) {
+        guard wipe != nil, comparisonRect.width > 0 else { return }
+        let value = min(1, max(0, (point.x-comparisonRect.minX)/comparisonRect.width))
+        wipe = value; wipeChanged?(value); needsDisplay = true
+        window?.invalidateCursorRects(for: self)
+    }
+    private func drawWipe(context: CGContext) {
+        let rect = comparisonRect
+        guard !rect.isNull, rect.width > 0, rect.height > 0 else { return }
+        let x = min(rect.maxX-1, max(rect.minX+1, wipeX))
+        context.saveGState(); defer { context.restoreGState() }
+        context.clip(to: rect)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.6).cgColor)
+        context.setLineWidth(3); context.move(to: CGPoint(x: x, y: rect.minY)); context.addLine(to: CGPoint(x: x, y: rect.maxY)); context.strokePath()
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.setLineWidth(1); context.move(to: CGPoint(x: x, y: rect.minY)); context.addLine(to: CGPoint(x: x, y: rect.maxY)); context.strokePath()
+        let handle = CGRect(x: x-12, y: rect.midY-12, width: 24, height: 24)
+        context.setFillColor(NSColor.black.withAlphaComponent(0.7).cgColor); context.fillEllipse(in: handle)
+        context.strokeEllipse(in: handle)
+        for direction in [-1.0, 1.0] {
+            context.move(to: CGPoint(x: x+direction*3, y: rect.midY+3))
+            context.addLine(to: CGPoint(x: x+direction*6, y: rect.midY))
+            context.addLine(to: CGPoint(x: x+direction*3, y: rect.midY-3))
+        }
+        context.strokePath()
+        for (text, origin, room) in [("Original", rect.minX+8, x-rect.minX), ("Edited", rect.maxX-58, rect.maxX-x)] where room > 85 {
+            let label = NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.white])
+            let size = label.size(), box = CGRect(x: origin-4, y: rect.maxY-size.height-12, width: size.width+8, height: size.height+8)
+            context.setFillColor(NSColor.black.withAlphaComponent(0.65).cgColor); context.fill(box)
+            label.draw(at: CGPoint(x: origin, y: box.minY+4))
+        }
     }
     private func drawCompositionGrid(context: CGContext) {
         let rect = imageRect
@@ -231,6 +319,12 @@ final class PhotoCanvas: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
+        if leveling, crop != nil, imageRect.contains(point) {
+            horizonLine = (point, point); needsDisplay = true; return
+        }
+        if wipe != nil, comparisonRect.contains(point), abs(point.x-wipeX) <= 14 {
+            draggingWipe = true; moveWipe(to: point); return
+        }
         if let crop {
             guard imageRect.contains(point) || cropCorners(crop).contains(where: { hypot($0.x-point.x, $0.y-point.y) < 16 }) else { return }
             let corners = cropCorners(crop)
@@ -246,6 +340,12 @@ final class PhotoCanvas: NSView {
         } else { dragPoint = point }
     }
     override func mouseDragged(with event: NSEvent) {
+        let canvasPoint = convert(event.locationInWindow, from: nil)
+        if let (start, _) = horizonLine {
+            horizonLine = (start, CGPoint(x: min(imageRect.maxX, max(imageRect.minX, canvasPoint.x)), y: min(imageRect.maxY, max(imageRect.minY, canvasPoint.y))))
+            needsDisplay = true; return
+        }
+        if draggingWipe { moveWipe(to: canvasPoint); return }
         if let cropDrag {
             let point = normalized(convert(event.locationInWindow, from: nil))
             let next: CropRegion
@@ -265,7 +365,10 @@ final class PhotoCanvas: NSView {
         viewportChanged?(viewport, bounds.size, backing)
         needsDisplay = true
     }
-    override func mouseUp(with event: NSEvent) { dragPoint = nil; cropDrag = nil }
+    override func mouseUp(with event: NSEvent) {
+        if let (start, end) = horizonLine, let angle = ImageGeometry.horizonCorrection(from: start, to: end) { horizonChanged?(angle) }
+        cancelDrags(); needsDisplay = true
+    }
     override func scrollWheel(with event: NSEvent) {
         guard image != nil, crop == nil else { return }
         if event.modifierFlags.contains(.option) || !event.hasPreciseScrollingDeltas {
@@ -278,6 +381,13 @@ final class PhotoCanvas: NSView {
         }
     }
     override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53, crop == nil { escape?(); return }
+        if wipe != nil, event.modifierFlags.intersection([.command, .control, .option]) == .option, [123, 124].contains(event.keyCode) {
+            let value = min(1, max(0, (wipe ?? 0.5)+(event.keyCode == 123 ? -0.05 : 0.05)))
+            wipe = value; wipeChanged?(value); needsDisplay = true
+            window?.invalidateCursorRects(for: self)
+            return
+        }
         guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { super.keyDown(with: event); return }
         if let crop {
             switch event.keyCode {
@@ -306,6 +416,10 @@ final class PhotoCanvas: NSView {
     }
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: (picking || crop != nil) ? .crosshair : viewport.scale == nil ? .arrow : .openHand)
+        if wipe != nil {
+            let rect = CGRect(x: wipeX-10, y: comparisonRect.minY, width: 20, height: comparisonRect.height).intersection(bounds)
+            if !rect.isNull { addCursorRect(rect, cursor: .resizeLeftRight) }
+        }
     }
 }
 

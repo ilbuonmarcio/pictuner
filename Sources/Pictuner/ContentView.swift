@@ -10,15 +10,17 @@ struct ContentView: View {
     @AppStorage("compositionGridVisible") private var compositionGridVisible = false
     var body: some View {
         HStack(spacing: 0) {
-            if workspaceSidebarVisible {
+            if workspaceSidebarVisible && !model.distractionFree {
                 WorkspaceSidebar().frame(width: 215)
                 Divider()
             }
             VStack(spacing: 0) {
-                previewToolbar
-                Divider()
+                if !model.distractionFree {
+                    previewToolbar
+                    Divider()
+                }
                 ZStack {
-                    PreviewCanvas(image: displayImage, clipping: displayClipping, detailImage: displayDetail, detailClipping: detailClipping, detailRegion: model.preview?.detail?.region, sourceSize: model.preview?.sourceSize ?? .zero, identity: model.selectedID, viewport: model.viewport, picking: model.pickingColor, showGrid: compositionGridVisible, crop: model.preview == nil ? nil : model.cropDraft, cropRatio: model.cropRatio, cropChanged: model.updateCrop, cropFinished: { if $0 { model.applyCrop() } else { model.cancelCrop() } }, viewportChanged: { model.updateViewport($0, canvas: $1, backing: $2) }, geometryChanged: { model.updateCanvasGeometry($0, backing: $1) }, compare: { model.showingOriginal = $0 }, navigate: model.navigate, sample: model.sampleColor)
+                    photoCanvas
                     if model.activePhoto == nil { emptyState }
                     else if let error = model.previewError {
                         ContentUnavailableView("Unable to open image", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -28,23 +30,32 @@ struct ContentView: View {
                             if model.showingOriginal { badge("Original", icon: "circle.lefthalf.filled") }
                             else if model.showMask { badge("Mask", icon: "viewfinder") }
                             else if model.pickingColor { badge("Pick a color", icon: "eyedropper") }
+                            else if model.levelingHorizon { badge("Draw horizon", icon: "angle") }
                             Spacer()
                             if model.isRendering && model.preview != nil { ProgressView().controlSize(.small).padding(12) }
                         }
                         Spacer()
                     }.padding(18).allowsHitTesting(false)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
-                PhotoToolbar()
-                Divider()
-                Filmstrip().frame(height: 118)
-                Divider()
-                statusBar
+                if model.isCropping {
+                    Divider()
+                    StraightenToolbar()
+                }
+                if !model.distractionFree {
+                    Divider()
+                    PhotoToolbar()
+                    Divider()
+                    Filmstrip().frame(height: 118)
+                    Divider()
+                    statusBar
+                }
             }.frame(minWidth: 400)
-            Divider()
-            GeometryReader { geometry in
-                InspectorView(histogramHeight: InspectorView.histogramHeight(for: geometry.size.height))
-            }.frame(width: InspectorView.width)
+            if !model.distractionFree {
+                Divider()
+                GeometryReader { geometry in
+                    InspectorView(histogramHeight: InspectorView.histogramHeight(for: geometry.size.height))
+                }.frame(width: InspectorView.width)
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(accent)
@@ -57,12 +68,29 @@ struct ContentView: View {
                 }.labelStyle(.iconOnly)
                     .help(workspaceSidebarVisible ? "Hide Workspaces · ⌃⌘S" : "Show Workspaces · ⌃⌘S")
                     .accessibilityValue(workspaceSidebarVisible ? "Visible" : "Hidden")
+                    .disabled(model.distractionFree)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: model.toggleComparisonWipe) {
+                    Image(systemName: "rectangle.lefthalf.filled")
+                        .foregroundStyle(model.comparisonWipe ? accent : .secondary)
+                }.accessibilityLabel("Before/after wipe")
+                    .accessibilityValue(model.comparisonWipe ? "Shown" : "Hidden")
+                    .help("Before/after wipe · ⌘\\ · Drag divider or use Option–Left/Right")
+                    .disabled(model.preview == nil || model.isCropping)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: model.toggleDistractionFree) {
+                    Image(systemName: model.distractionFree ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }.accessibilityLabel(model.distractionFree ? "Exit distraction-free mode" : "Distraction-free mode")
+                    .help("Distraction-free mode · ⇧⌘F · Esc to exit").disabled(model.isCropping)
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { model.showExportSheet = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
                     .disabled(model.photos.isEmpty || model.exporting || model.isCropping)
             }
         }
+        .onExitCommand(perform: model.escapePreview)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in model.showingOriginal = false }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in model.showingOriginal = false }
         .sheet(isPresented: $model.showExportSheet) { ExportSheet().tint(accent) }
@@ -76,6 +104,37 @@ struct ContentView: View {
         .alert("Export", isPresented: Binding(get: { model.exportSummary != nil }, set: { if !$0 { model.exportSummary = nil } })) {
             Button("OK") { model.exportSummary = nil }
         } message: { Text(model.exportSummary ?? "") }
+    }
+
+    private var photoCanvas: PreviewCanvas {
+        PreviewCanvas(image: displayImage,
+            clipping: displayClipping,
+            detailImage: displayDetail,
+            detailClipping: detailClipping,
+            detailRegion: model.preview?.detail?.region,
+            sourceSize: model.preview?.sourceSize ?? .zero,
+            identity: model.selectedID,
+            viewport: model.viewport,
+            picking: model.pickingColor,
+            showGrid: compositionGridVisible,
+            crop: model.preview == nil ? nil : model.cropDraft,
+            cropRatio: model.cropRatio,
+            originalImage: model.preview?.original,
+            originalDetail: model.preview?.detail?.original,
+            originalClipping: model.showClipping ? model.preview?.originalClipping : nil,
+            originalDetailClipping: model.showClipping ? model.preview?.detail?.originalClipping : nil,
+            wipe: model.activeWipe,
+            wipeChanged: model.setWipePosition,
+            leveling: model.levelingHorizon,
+            horizonChanged: model.levelHorizon,
+            escape: model.escapePreview,
+            cropChanged: model.updateCrop,
+            cropFinished: { if $0 { model.applyCrop() } else { model.cancelCrop() } },
+            viewportChanged: { model.updateViewport($0, canvas: $1, backing: $2) },
+            geometryChanged: { model.updateCanvasGeometry($0, backing: $1) },
+            compare: { model.showingOriginal = $0 },
+            navigate: model.navigate,
+            sample: model.sampleColor)
     }
 
     private var displayImage: CGImage? {

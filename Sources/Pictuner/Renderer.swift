@@ -168,7 +168,18 @@ final class Renderer {
     }
 
     func geometry(_ input: CIImage, _ geometry: ImageGeometry) -> CIImage {
-        let image = orient(input, geometry: geometry)
+        var image = orient(input, geometry: geometry)
+        if geometry.straightenAngle != 0 {
+            let size = image.extent.size, center = CGPoint(x: size.width/2, y: size.height/2)
+            let radians = geometry.straightenAngle * .pi / 180
+            let c = cos(radians), s = sin(radians)
+            let transform = CGAffineTransform(a: c, b: -s, c: s, d: c,
+                tx: center.x-c*center.x-s*center.y, ty: center.y+s*center.x-c*center.y)
+            let safe = geometry.straightenedSize(size)
+            let frame = CGRect(x: center.x-safe.width/2, y: center.y-safe.height/2, width: safe.width, height: safe.height)
+            image = image.transformed(by: transform).cropped(to: frame)
+                .transformed(by: CGAffineTransform(translationX: -frame.minX, y: -frame.minY))
+        }
         guard let crop = geometry.crop else { return image }
         let rect = crop.pixelRect(in: image.extent.size)
         return image.cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
@@ -208,8 +219,8 @@ final class Renderer {
         return image.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1]).cropped(to: CGRect(x: 0, y: 0, width: floor(image.extent.width*scale), height: floor(image.extent.height*scale)))
     }
 
-    func cgImage(_ image: CIImage) throws -> CGImage {
-        guard let result = context.createCGImage(image, from: image.extent, format: .RGBA8, colorSpace: colorSpace) else {
+    func cgImage(_ image: CIImage, format: CIFormat = .RGBA8) throws -> CGImage {
+        guard let result = context.createCGImage(image, from: image.extent, format: format, colorSpace: colorSpace) else {
             throw PictunerError.message("The image could not be rendered.")
         }
         return result

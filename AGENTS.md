@@ -10,11 +10,12 @@ Read `docs/SPEC.md` and `docs/ARCHITECTURE.md` before implementing features. Kee
 - The app name is **PicTuner**, with a capital T. Use that spelling in UI, bundle names, and documentation. Keep existing storage paths and bundle identifiers stable.
 
 - Never overwrite, modify, rename, or delete source images as part of editing or export.
-- Apply crop, quarter-turn rotation, and horizontal/vertical mirror non-destructively in the shared source-resolution pipeline. Keep framing out of reusable color presets and batch/copy operations. Crop drafts must be cancellable and commit as one undo action.
+- Apply crop, fine-angle straightening, quarter-turn rotation, and horizontal/vertical mirror non-destructively in the shared source-resolution pipeline. Keep framing out of reusable color presets and batch/copy operations. Crop and straighten drafts must be cancellable and commit together as one undo action. Trim rotated edges to avoid transparent wedges.
 - Store edits as metadata and autosave them across image selection changes and app restarts.
 - Support RAW images in the initial release; do not silently reduce scope to JPEG/PNG.
 - Use the same ordered adjustment pipeline for preview, histogram, and export.
 - Hold Space to show the original; release to restore the edited preview. Provide an equivalent press-and-hold button and a visible Original indicator.
+- Keep before/after wipe aligned at overview and source-detail resolutions. Wipe and distraction-free viewing are transient display state, never saved image edits or export effects.
 - For RAW, original means the default RAW development before color/tone adjustments. Comparison retains the current crop/orientation so the viewport stays aligned.
 - Preserve responsive navigation and prevent stale asynchronous results from replacing the currently selected image.
 - Sliders must update the image during a continuous drag. Never debounce preview rendering until input stops or reject every frame because a newer slider value exists. Keep rendering off the main thread, coalesce pending input, and preserve one undo step per drag.

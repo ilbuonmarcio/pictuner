@@ -44,7 +44,7 @@ final class GeometryTests: XCTestCase {
             for h in [false, true] {
                 for v in [false, true] {
                     var a = Adjustments()
-                    a.geometry = ImageGeometry(quarterTurns: turns, flipHorizontal: h, flipVertical: v, crop: CropRegion(CGRect(x: 0.1, y: 0.25, width: 0.5, height: 0.5)))
+                    a.geometry = ImageGeometry(quarterTurns: turns, flipHorizontal: h, flipVertical: v, crop: CropRegion(CGRect(x: 0.1, y: 0.25, width: 0.5, height: 0.5)), straightenAngle: 7)
                     let before = try r.render(source, adjustments: a)
                     for clockwise in [false, true] {
                         var next = a; next.geometry.rotate(clockwise: clockwise)
@@ -92,7 +92,7 @@ final class GeometryTests: XCTestCase {
         let url = directory.appendingPathComponent("workspace.json")
         let bytes = try JSONSerialization.data(withJSONObject: metadata); try bytes.write(to: url)
         let store = WorkspaceStore(root: root)
-        XCTAssertNil(store.failure); XCTAssertEqual(store.document.schemaVersion, 4)
+        XCTAssertNil(store.failure); XCTAssertEqual(store.document.schemaVersion, 5)
         XCTAssertEqual(store.settings(for: "missing.nef").adjustments, a)
         XCTAssertTrue(store.settings(for: "missing.nef").exportReady)
         XCTAssertEqual(try Data(contentsOf: url), bytes)
@@ -174,6 +174,8 @@ final class GeometryTests: XCTestCase {
         let model = AppModel(restoringSession: false, supportDirectory: root.appendingPathComponent("support"))
         model.open(WorkspaceReference(path: root.path)); try await settle(model)
         model.rotate(clockwise: true); model.flip(horizontal: true)
+        model.beginCrop(); try await settle(model)
+        model.setStraightenDraft(4); try await settle(model); model.applyCrop(); try await settle(model)
         var edited = model.settings.adjustments; edited.exposure = 0.75; model.setAdjustments(edited)
         model.copyAdjustments(); model.selectAll(); model.applyToSelection()
         let other = try XCTUnwrap(model.photos.first { $0.id == "second.png" })

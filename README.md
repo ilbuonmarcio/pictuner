@@ -16,9 +16,12 @@ Browse your photos, tune their look, and export the keepers. PicTuner works dire
 - **Live adjustments.** Change exposure, contrast, highlights, shadows, white balance, hue, saturation, and vibrance while the preview updates as you drag. The two-column inspector keeps all adjustments visible without scrolling.
 - **Detail and effects.** Tune clarity, texture, sharpening, noise reduction, black & white, sepia, vignette, glow, film grain, and shadow/highlight color grading. Each slider has its own reset.
 - **Selective color.** Pick a color from the photo, accentuate similar tones, and desaturate the rest. Adjust the matching range and softness, or inspect the selection mask.
-- **Framing and detail.** Crop with aspect-ratio presets, rotate in 90° steps, mirror horizontally or vertically, and toggle a 3×3 composition grid. Zoom to actual source pixels or beyond and pan to inspect details.
+- **Framing and detail.** Crop with aspect-ratio presets, straighten with an angle slider or horizon guide, rotate in 90° steps, mirror horizontally or vertically, and toggle a 3×3 composition grid. Zoom to actual source pixels or beyond and pan to inspect details.
+- **Distraction-free viewing.** Hide the surrounding panels with ⇧⌘F and return with Escape. Navigation, zoom, and hold-Space comparison stay available.
+- **Before/after wipe.** Toggle with ⌘\, then drag the divider between original and edited views, including while zoomed.
 - **Original comparison and histogram.** Hold Space or the Original button to compare, with your current framing and zoom retained. View RGB/luminance histograms and clipping indicators.
 - **Reusable edits.** Save color presets, copy and paste adjustments, or apply them to multiple selected photos. Each photo keeps its own crop and orientation.
+- **Export recipes.** Choose Web Page (full-resolution JPEG 80%), Instagram (JPEG 100%), Full Resolution (JPEG 95%), or Lossless (16-bit PNG). All four keep full rendered dimensions, and settings remain editable.
 - **Deliberate export.** Mark photos with **Include in Export**, then export just those photos as JPEG or PNG, with optional resizing and subfolder preservation.
 - **RAW support.** Develop camera RAW files using macOS’s RAW decoder, alongside JPEG and PNG. Supported cameras and formats depend on the host macOS version.
 
@@ -61,7 +64,7 @@ The script builds and bundles `build/PicTuner.app` with a local ad-hoc signature
 2. Select a photo in the filmstrip. Click the preview to focus it, then use **← / →** to browse.
 3. Adjust the image, crop or rotate as needed, and hold **Space** to check the original. Changes autosave as you work and survive image changes and app restarts.
 4. Click the checkmark beside the photo controls, or press **⇧⌘G**, to mark a photo for export. Marked thumbnails display a green checkmark.
-5. Choose **Export**, select JPEG or PNG and an output folder outside your registered workspaces, then export the marked photos.
+5. Choose **Export**, select JPEG or PNG and an output folder outside your registered workspaces, choose a recipe or adjust the settings, then export the marked photos.
 
 Favorites and thumbnail selection do not mark a photo for export. Rejected photos are excluded. Export starts with all marked, non-rejected photos in the workspace; you can narrow the scope to a folder, selection, or favorites.
 
@@ -78,7 +81,10 @@ Command-click thumbnails to select several photos. The **Photo actions** menu (�
 | Fit photo / actual pixels | ⌘0 / ⌘1 |
 | Zoom in / out | ⌘+ / ⌘− |
 | Show / hide Workspaces | ⌃⌘S |
-| Crop | ⌘K |
+| Crop and straighten | ⌘K |
+| Distraction-free mode | ⇧⌘F; Esc to exit |
+| Before/after wipe | `⌘\` |
+| Move comparison divider | Option–← / → |
 | Apply / cancel crop | Return / Esc |
 | Toggle Include in Export | ⇧⌘G |
 | Copy / paste adjustments | ⇧⌘C / ⇧⌘V |
@@ -86,6 +92,8 @@ Command-click thumbnails to select several photos. The **Photo actions** menu (�
 | Export | ⇧⌘E |
 
 You can also pinch or use the mouse wheel to zoom, drag or two-finger scroll to pan, and double-click to switch between Fit and 100% around the clicked point. At 100%, one source pixel maps to one display pixel, accounting for Retina scaling.
+
+The angle control and horizon-guide button appear while cropping. Straighten trims the rotated edges automatically, with a range of −15° to +15°. **Apply** commits crop and angle together; **Cancel** discards both. Comparison retains this framing.
 
 ## Edits, originals, and exports
 

@@ -17,6 +17,8 @@ struct PhotoToolbar: View {
         Group {
             Button(action: model.beginCrop) { Label("Crop", systemImage: "crop") }
                 .help("Crop · ⌘K").disabled(!model.canEdit || model.preview == nil)
+            Button { model.beginCrop(); model.levelingHorizon = model.isCropping } label: { Image(systemName: "angle") }
+                .help("Straighten: drag along a horizon").accessibilityLabel("Straighten").disabled(!model.canEdit || model.preview == nil)
             Button { model.rotate(clockwise: false) } label: { Image(systemName: "rotate.left") }
                 .help("Rotate left 90°").accessibilityLabel("Rotate left 90 degrees").disabled(!model.canEdit)
             Button { model.rotate(clockwise: true) } label: { Image(systemName: "rotate.right") }
@@ -80,5 +82,24 @@ struct PhotoToolbar: View {
             Button("Apply", action: model.applyCrop).buttonStyle(.borderedProminent)
                 .help("Apply crop · Return").disabled(model.preview == nil)
         }
+    }
+}
+
+struct StraightenToolbar: View {
+    @EnvironmentObject var model: AppModel
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Straighten").fontWeight(.medium)
+            Slider(value: Binding(get: { model.straightenDraft }, set: model.setStraightenDraft),
+                   in: -15...15, onEditingChanged: model.straightenEditing)
+                .accessibilityLabel("Straighten angle")
+            Text(String(format: "%+.1f°", model.straightenDraft)).monospacedDigit().frame(width: 44)
+            ResetValueButton(title: "Straighten angle", value: Binding(get: { model.straightenDraft }, set: model.setStraightenDraft), defaultValue: 0)
+            Button { model.levelingHorizon.toggle() } label: {
+                Image(systemName: "angle").foregroundStyle(model.levelingHorizon ? Color.accentColor : .secondary)
+            }.accessibilityLabel("Draw horizon").accessibilityValue(model.levelingHorizon ? "Active" : "Inactive")
+                .help("Drag along a horizon to level it. Edges are trimmed automatically.")
+        }.font(.system(size: 11)).buttonStyle(.borderless).controlSize(.small)
+            .padding(.horizontal, 16).frame(height: 36)
     }
 }

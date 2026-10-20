@@ -33,12 +33,16 @@ The `compositionGridVisible` AppStorage preference (default false) is shared by 
 
 `PhotoToolbar` sits between the preview and filmstrip. It owns transform actions, Favorite/Reject/export marking, and a Photo actions menu with copy/paste plus contextual batch actions. During crop mode, the same bar presents aspect with its own Reset, Reset Crop, Cancel and Apply. Layout checks bound the entire inspector's fitting height to 900 points with the 112-point plot and to 1000 points with the 168-point plot, at 720 points wide with selective color both enabled and disabled, and both toolbar states to 400 points wide. The root content minimum is 1340 × 900 to accommodate both columns alongside the photo and Workspaces; the window fills the current display's available frame on every launch. `OpeningWindowSize` attaches to the scene content and applies `NSScreen.visibleFrame` on the next main-queue turn after window attachment, overriding restored dimensions while respecting the menu bar/Dock. It sizes each window once, so normal user resizing and subsequent view updates remain unaffected. The 1480 × 900 SwiftUI default is only a fallback before the opening frame is applied.
 
+`AppModel.distractionFree` is transient scene state, independent of the sidebar AppStorage preference. `ContentView` removes the surrounding editor views while retaining the native window toolbar and the same model/viewport. ⇧⌘F and Escape restore the editor; crop mode restores the chrome and prevents hiding its draft controls.
+
+`AppModel.comparisonWipe` and its normalized visible-region position are transient. The canvas draws edited overview/detail first, then clips original overview/detail (and matching clipping overlays) to the left of the divider. Labels/handle/grid are drawn afterward and all branches clip to canvas bounds. The divider's position is relative to the image's intersection with the viewport, so zoom/pan cannot strand it offscreen. Handle dragging changes view state only; drags elsewhere retain panning. Option-arrow/View menu actions provide keyboard access. Original comparison, mask, picker, and crop select the same image/detail branches as before; a held original or mask/picker suspends the wipe without changing its position. Histogram statistics remain full-frame rather than describing a composite screenshot.
+
 ## Rendering contract
 
 Define one versioned, deterministic adjustment order. A starting proposal is:
 
 1. Decode, orientation, RAW baseline and input color management.
-2. Quarter-turn rotation, mirroring, and source-pixel crop.
+2. Quarter-turn rotation, mirroring, fine-angle straightening with automatic edge trimming, and source-pixel crop.
 3. Optional noise reduction.
 4. White balance, exposure, brightness, contrast, highlights and shadows.
 5. Global hue, saturation, and vibrance.
@@ -72,8 +76,8 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 ```json
 {
-  "schemaVersion": 4,
-  "renderVersion": 2,
+  "schemaVersion": 5,
+  "renderVersion": 3,
   "workspaceID": "UUID",
   "images": {
     "shoot/car.raw": {
@@ -89,13 +93,17 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 This illustrates structure, not a finalized settings schema. Define typed adjustment fields, neutral defaults, effect enablement, ranges and selective-color parameters before implementation. Use stable workspace/image identities as needed; relative paths alone do not solve external renames.
 
-Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1–3 to schema 4/render version 2 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
+Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1–4 to schema 5/render version 3 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
 
 Schema 3 adds `adjustments.geometry`: clockwise `quarterTurns`, two mirror flags, and an optional normalized bottom-left `crop` rectangle in the rotated/mirrored coordinate system. Older adjustments and presets decode with neutral geometry. Invalid crop bounds reject metadata decoding, preserving the existing file. Geometry edits use the existing adjustment undo records and autosave. Reusable color presets/copy/batch operations preserve each destination's geometry.
 
 Schema 4/render version 2 adds the 15 effect parameters with neutral missing-key defaults. Existing color edits, geometry, flags, identities, and missing-file entries are retained; migration writes only on the normal save path. Older app versions reject this metadata instead of silently dropping effect fields. Out-of-range new parameters reject decoding and preserve the file. Reusable presets decode missing effect parameters to the same defaults.
 
 `Renderer.render` applies geometry before color/effects. Preview applies the same source-pixel crop before downsampling and invalidates its bounded baselines when geometry changes. Detail regions use the resulting cropped image coordinate system; vignette is relative to that final frame. Interactive crop mode submits an uncropped adjustment snapshot while keeping the draft only in memory. Apply commits one adjustment; cancel/navigation discards it. Geometry transitions invalidate pending frames and reset Fit to prevent stale dimensions or sampling coordinates.
+
+Schema 5/render version 3 adds `geometry.straightenAngle` (clockwise degrees, −15…+15). Old geometry decodes to zero; invalid angles reject metadata without rewriting it. After quarter-turn/mirror orientation, the renderer rotates about the source center and trims an original-aspect rectangle wholly inside the rotated source. Its scale is the smaller of `w/(w*cos(a)+h*sin(a))` and `h/(w*sin(a)+h*cos(a))`, using the absolute angle, with dimensions rounded down at source resolution. The usual normalized user crop follows this trimmed frame. Mirroring negates the fine angle so flipping an already straightened/cropped image preserves its visible composition; quarter-turns retain the angle.
+
+Crop mode owns `straightenDraft`, a temporary interactive-resolution flag, and a horizon-guide mode alongside `cropDraft`. Preview requests substitute the draft angle and omit the crop while settings/metadata remain unchanged. Each completed angle frame can publish during a drag through the existing coalescing scheduler; angle changes never invalidate every in-flight frame. Release refines at 1800 pixels. Apply combines crop/angle in one adjustment; Cancel/navigation invalidate outstanding frames and discard both. The guide measures its line in bottom-left canvas points, normalizes direction to ±90°, and adds the clockwise correction to the current draft (clamped to ±15°). It ignores tiny drags and avoids sampling an unfinished frame.
 
 Serialize writes through one store. Debounce slider updates, then flush on image transitions and normal termination. Write a temporary file on the same volume and atomically replace the metadata file. Preserve the last valid data if decoding, migration or saving fails. Handle termination/save completion explicitly rather than relying on a best-effort background task.
 
@@ -115,6 +123,14 @@ Store app-wide workspace registrations, security-scoped bookmarks if needed, and
 - Keep only one visible detail crop in addition to the overview caches. Do not allocate full-source-size original, edited, mask, and clipping buffers solely to implement zoom. All detail frames must use the same adjustment snapshot as their overview.
 - Restore security-scoped access correctly when required by the chosen sandbox/distribution model.
 - Treat comparison as temporary UI state, separate from adjustments and undo history.
+
+## Export recipes and output depth
+
+`ExportRecipe` defines four fixed recipes: Web Page (JPEG 0.80), Instagram (JPEG 1.0), Full Resolution (JPEG 0.95), and Lossless (PNG 16-bit). Each sets `longEdge` to zero so export retains full rendered dimensions. Applying a recipe preserves scope, folder structure and collision policy. `ExportOptions.recipe` is derived from active encoding settings rather than a separate label that can drift out of sync. Manual format/quality/size/depth changes show Custom when no recipe matches; irrelevant JPEG quality does not change a PNG recipe. Reset restores only encoding fields. The export sheet keeps its height stable during recipe/custom transitions and uses tooltips for recipe details.
+
+PNG bit depth defaults to eight; `PNGBitDepth.sixteen` selects `CIFormat.RGBA16` at the final `Renderer.cgImage` conversion. Preview, histogram and existing default exports continue using RGBA8. ImageIO receives the resulting 16-bit CGImage directly for PNG encoding; no intermediate 8-bit preview enters this path. PNG receives no lossy-compression-quality property. All formats continue using sRGB and omit source EXIF/GPS. No workspace metadata schema change is needed for session-only export options.
+
+Instagram deliberately uses a full-resolution, maximum-quality sRGB JPEG without automatic resizing/cropping. The official help page could not be reliably retrieved during implementation, so no current dimension/aspect limit is asserted or encoded. Revisit only with verified platform guidance; do not promise that any recipe controls Instagram's upload processing.
 
 ## Export safety
 

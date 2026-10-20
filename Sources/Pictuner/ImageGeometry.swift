@@ -1,6 +1,6 @@
 import Foundation
 
-/// Normalized coordinates in the rotated/mirrored image, with a bottom-left origin.
+/// Normalized coordinates after orientation/straightening/edge trimming, with a bottom-left origin.
 struct CropRegion: Codable, Equatable, Sendable {
     var x = 0.0
     var y = 0.0
@@ -64,6 +64,44 @@ struct ImageGeometry: Codable, Equatable, Sendable {
     var flipHorizontal = false
     var flipVertical = false
     var crop: CropRegion?
+    var straightenAngle = 0.0 // clockwise degrees, after quarter-turns and mirroring
+
+    init(quarterTurns: Int = 0, flipHorizontal: Bool = false, flipVertical: Bool = false,
+         crop: CropRegion? = nil, straightenAngle: Double = 0) {
+        self.quarterTurns = quarterTurns; self.flipHorizontal = flipHorizontal; self.flipVertical = flipVertical
+        self.crop = crop; self.straightenAngle = straightenAngle
+    }
+
+    private enum CodingKeys: String, CodingKey { case quarterTurns, flipHorizontal, flipVertical, crop, straightenAngle }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        quarterTurns = try c.decode(Int.self, forKey: .quarterTurns)
+        flipHorizontal = try c.decode(Bool.self, forKey: .flipHorizontal)
+        flipVertical = try c.decode(Bool.self, forKey: .flipVertical)
+        crop = try c.decodeIfPresent(CropRegion.self, forKey: .crop)
+        straightenAngle = try c.decodeIfPresent(Double.self, forKey: .straightenAngle) ?? 0
+        guard (0...3).contains(quarterTurns), straightenAngle.isFinite, (-15...15).contains(straightenAngle) else {
+            throw DecodingError.dataCorruptedError(forKey: .straightenAngle, in: c, debugDescription: "Invalid image orientation")
+        }
+    }
+
+    /// A centered, original-aspect frame whose corners stay inside the rotated source.
+    /// Integer dimensions are shared by preview, sampling, histogram and export.
+    func straightenedSize(_ size: CGSize) -> CGSize {
+        guard straightenAngle != 0, size.width > 0, size.height > 0 else { return size }
+        let radians = abs(straightenAngle) * .pi / 180
+        let c = cos(radians), s = sin(radians)
+        let scale = min(size.width/(size.width*c+size.height*s), size.height/(size.width*s+size.height*c))
+        return CGSize(width: max(1, floor(size.width*scale)), height: max(1, floor(size.height*scale)))
+    }
+
+    static func horizonCorrection(from start: CGPoint, to end: CGPoint) -> Double? {
+        guard hypot(end.x-start.x, end.y-start.y) >= 12 else { return nil }
+        var angle = atan2(end.y-start.y, end.x-start.x)*180 / .pi
+        if angle > 90 { angle -= 180 }
+        if angle < -90 { angle += 180 }
+        return angle
+    }
 
     mutating func rotate(clockwise: Bool) {
         let direction = (clockwise ? 1 : -1) * (flipHorizontal != flipVertical ? -1 : 1)
@@ -75,6 +113,7 @@ struct ImageGeometry: Codable, Equatable, Sendable {
     }
     mutating func flip(horizontal: Bool) {
         if horizontal { flipHorizontal.toggle() } else { flipVertical.toggle() }
+        straightenAngle = -straightenAngle
         if let c = crop {
             crop = CropRegion(CGRect(x: horizontal ? 1-c.x-c.width : c.x, y: horizontal ? c.y : 1-c.y-c.height, width: c.width, height: c.height))
         }

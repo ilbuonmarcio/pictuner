@@ -91,7 +91,12 @@ Distinguish numerical adjustments from presets, which store reusable settings. K
 - Copy/paste adjustments between photos and apply adjustments to selected images. These operations copy settings, not rendered pixels.
 - Editing one image must not inadvertently change another image's saved state.
 
-## Crop, rotate, and mirror
+## Crop, straighten, rotate, and mirror
+
+- Straighten is available beside Crop and in the Photo menu. It opens the crop editor with a horizon guide; the crop editor always provides a −15°…+15° angle slider, value, Reset, and Draw Horizon button in a separate contextual row beside the preview.
+- Drag along a horizon to level it, or adjust the angle continuously. Positive angles rotate clockwise. Guide direction does not matter; ignore drags shorter than 12 points and clamp corrections to the supported range.
+- Straightening runs after quarter-turn/mirror orientation, before user crop. Automatically trim a centered frame with the oriented source's aspect ratio so rotated corners do not create empty wedges. Crop coordinates refer to this trimmed frame. Comparison retains the same geometry.
+- Crop and angle remain a draft until Apply/Return; commit them as one undo action. Cancel/Escape or image navigation discards both. Exclude straightening from reusable color presets and copy/batch edits, like other framing.
 
 - Provide 90° clockwise/counterclockwise rotation and horizontal/vertical flip in the photo toolbar above the filmstrip and the Photo menu.
 - Crop (⌘K) shows the full rotated/mirrored image at Fit, with a draggable rectangle, corner handles, rule-of-thirds grid, and dimmed excluded area. Drag inside to move the selection, or outside it to draw a new rectangle.
@@ -164,6 +169,10 @@ Persist all parameters. Handle hue wraparound, especially red, without a discont
 - Export includes only marked, non-rejected photos. Default to all such photos across the workspace, even if a subfolder is currently displayed. Optional scopes narrow these to the current folder subtree, thumbnail selection, or favorites; no scope includes unmarked photos.
 - Show an exact included count in the export dialog and label scopes as marked photos. When nothing qualifies, show the marking instruction and disable starting export. Keep color-profile/metadata policy concise; report destination restrictions only when a chosen destination is invalid.
 - Choose an output folder, JPEG or PNG, JPEG quality, and optional resizing.
+- Provide four built-in export recipes in the export dialog: **Web Page** (full-resolution JPEG, 80% quality), **Instagram** (full-resolution JPEG, 100%), **Full Resolution** (full-resolution JPEG, 95%), and **Lossless** (full-resolution 16-bit PNG). All keep the current photo crop/orientation, sRGB, and the existing metadata-exclusion policy; none resizes, crops, or upscales automatically.
+- Instagram is a maximum-quality input recipe, not a promise about platform output or a fixed platform dimension/aspect policy. Upload processing is controlled by Instagram. Do not force an unverified size limit or recrop a photo as part of this recipe.
+- Recipes change format, JPEG quality, size, and PNG bit depth only. Keep export scope, explicit approval flags, folder structure and collision choices. All controls remain editable; show Custom when encoding settings do not match a recipe. Recipe Reset restores the existing encoding defaults (JPEG 90%, full resolution, 8-bit PNG setting), retaining job-selection/file-handling choices.
+- PNG export offers 8-bit and 16-bit output. Lossless refers to compression of the rendered sRGB image, not preservation of a RAW sensor file or all source metadata. Recipes are fixed built-ins, always available; export choices remain session state and survive reopening the dialog within the session.
 - Optionally preserve relative source folder structure.
 - Render with full-resolution source data and current saved adjustment settings.
 - Never overwrite originals. Check canonical destination identities, including symlinks and overlapping source/output folders.
@@ -215,3 +224,12 @@ These phases are implementation order, not permission to omit later phases from 
 - Export metadata preservation/privacy policy.
 - External rename detection, concurrent workspace access, and any read-only persistence fallback.
 - Measured responsiveness and memory targets using representative photo libraries.
+
+## Distraction-free viewing and before/after wipe
+
+- A window-toolbar button and View menu item (⇧⌘F) hide the Workspaces sidebar, preview header, inspector, photo toolbar, filmstrip, and status bar. Keep the native toolbar with an explicit exit button. Escape restores the editor. Entering crop restores the editor; distraction-free mode is unavailable while cropping.
+- Keep the active photo, its edits, zoom, and pan when switching modes, subject to normal viewport bounds. Fit adapts to the larger canvas. Arrow navigation, zoom shortcuts/gestures, and hold-Space comparison continue to work. Preserve the separate sidebar visibility preference. Start each launch in the normal editor.
+- A toolbar button and View menu item (⌘\) toggle a vertical before/after wipe: original on the left, edited on the right, with labels and a draggable divider. Use Option–Left/Right or the corresponding View menu items to move it in 5% increments.
+- Both sides share framing, zoom, pan, and matching source-detail images. Position the divider within the visible photo region so it remains reachable when zoomed or panned. Dragging away from the divider still pans normally.
+- Holding Space temporarily shows the full original, then restores the wipe on release. Mask and eyedropper displays temporarily suspend the wipe; entering crop turns it off. The histogram continues to show the whole edited image unless the original is held.
+- Wipe visibility/position and distraction-free mode are session-only view state and never enter metadata, undo, presets, the rendering graph, or exported images. Start with the divider centered and recenter it when selecting another photo.

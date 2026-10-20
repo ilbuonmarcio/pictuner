@@ -9,6 +9,22 @@ struct ExportSheet: View {
                 Spacer()
                 Text("\(model.exportItems().count) \(model.exportItems().count == 1 ? "photo" : "photos")").foregroundStyle(.secondary)
             }
+            HStack {
+                Text("Recipe")
+                Spacer()
+                Menu {
+                    ForEach(ExportRecipe.allCases) { recipe in
+                        Button(recipe.rawValue) { recipe.apply(to: &model.exportOptions) }.help(recipe.summary)
+                    }
+                } label: { Text(model.exportOptions.recipe?.rawValue ?? "Custom") }
+                    .accessibilityLabel("Export recipe")
+                    .accessibilityValue(model.exportOptions.recipe?.rawValue ?? "Custom")
+                    .help(model.exportOptions.recipe?.help ?? "Choose a recipe, then adjust any export setting.")
+                Button("Reset") { model.exportOptions.resetEncoding() }
+                    .font(.system(size: 9, weight: .medium)).buttonStyle(.borderless)
+                    .accessibilityLabel("Reset Export recipe")
+                    .disabled(model.exportOptions.encodingIsDefault)
+            }
             Form {
                 HStack {
                     Picker("Photos", selection: $model.exportOptions.scope) { ForEach(ExportScope.allCases, id: \.self) { Text($0.rawValue) } }
@@ -24,6 +40,13 @@ struct ExportSheet: View {
                         Slider(value: $model.exportOptions.quality, in: 0.3...1).accessibilityLabel("Export quality")
                         Text("\(Int(model.exportOptions.quality*100))%").monospacedDigit().frame(width: 42)
                         reset("Export quality", \.quality)
+                    }
+                } else {
+                    HStack {
+                        Picker("Bit depth", selection: $model.exportOptions.pngBitDepth) {
+                            ForEach(PNGBitDepth.allCases, id: \.self) { Text($0.rawValue) }
+                        }
+                        reset("PNG bit depth", \.pngBitDepth)
                     }
                 }
                 HStack {

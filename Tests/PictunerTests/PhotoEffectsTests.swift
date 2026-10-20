@@ -71,8 +71,8 @@ final class PhotoEffectsTests: XCTestCase {
         XCTAssertEqual(store.settings(for: "missing.nef").adjustments, existing)
         XCTAssertTrue(store.save())
         let reopened = WorkspaceStore(root: root)
-        XCTAssertEqual(reopened.document.schemaVersion, 4)
-        XCTAssertEqual(reopened.document.renderVersion, 2)
+        XCTAssertEqual(reopened.document.schemaVersion, 5)
+        XCTAssertEqual(reopened.document.renderVersion, 3)
         XCTAssertTrue(reopened.settings(for: "missing.nef").exportReady)
     }
 
@@ -216,10 +216,15 @@ final class PhotoEffectsTests: XCTestCase {
         }
         let url = URL(fileURLWithPath: path)
         let original = try Data(contentsOf: url)
-        let preview = try renderer.preview(url: url, adjustments: allEffects(), longEdge: 640)
+        var adjustments = allEffects()
+        adjustments.geometry.straightenAngle = 4
+        adjustments.geometry.crop = CropRegion(CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8))
+        let expectedSize = renderer.geometry(try renderer.load(url), adjustments.geometry).extent.size
+        let preview = try renderer.preview(url: url, adjustments: adjustments, longEdge: 640)
+        XCTAssertEqual(preview.sourceSize, expectedSize)
         XCTAssertGreaterThan(difference(bytes(CIImage(cgImage: preview.original)), bytes(CIImage(cgImage: preview.edited))), 0.5)
         var options = ExportOptions(); options.longEdge = 640
-        let result = Exporter.run(items: [ExportItem(photo: Photo(relativePath: url.lastPathComponent, url: url), adjustments: allEffects())], destination: root.appendingPathComponent("raw-export"), roots: [url.deletingLastPathComponent()], options: options, cancellation: ExportCancellation()) { _, _ in }
+        let result = Exporter.run(items: [ExportItem(photo: Photo(relativePath: url.lastPathComponent, url: url), adjustments: adjustments)], destination: root.appendingPathComponent("raw-export"), roots: [url.deletingLastPathComponent()], options: options, cancellation: ExportCancellation()) { _, _ in }
         XCTAssertEqual(result.completed, 1); XCTAssertEqual(result.errors, [])
         XCTAssertEqual(try Data(contentsOf: url), original)
     }

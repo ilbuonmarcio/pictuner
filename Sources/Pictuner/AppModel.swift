@@ -16,10 +16,35 @@ final class AppModel: ObservableObject {
     @Published var showMask = false
     @Published var showClipping = false
     @Published var pickingColor = false
+    @Published var distractionFree = false
+    @Published private(set) var comparisonWipe = false
+    @Published private(set) var wipePosition = 0.5
+    @Published private(set) var straightenDraft = 0.0
+    @Published var levelingHorizon = false
+    private var straightenGesture = false
     @Published private(set) var cropDraft: CropRegion?
     @Published private(set) var cropAspect = CropAspect.free
     var isCropping: Bool { cropDraft != nil }
     var cropRatio: Double? { cropAspect.ratio(source: preview?.sourceSize ?? .zero) }
+    var activeWipe: Double? {
+        comparisonWipe && !isCropping && !showingOriginal && !showMask && !pickingColor ? wipePosition : nil
+    }
+
+    func toggleDistractionFree() { guard !isCropping else { return }; distractionFree.toggle() }
+    func toggleComparisonWipe() {
+        guard preview != nil, !isCropping else { return }
+        comparisonWipe.toggle()
+        if comparisonWipe { showingOriginal = false; showMask = false; pickingColor = false }
+    }
+    func setWipePosition(_ value: Double) {
+        guard value.isFinite else { return }
+        wipePosition = min(1, max(0, value))
+    }
+    func escapePreview() {
+        if isCropping { cancelCrop() }
+        else if distractionFree { distractionFree = false }
+        else if comparisonWipe { comparisonWipe = false }
+    }
     @Published var isLoading = false
     @Published var isRendering = false
     @Published var previewError: String?
@@ -131,7 +156,7 @@ final class AppModel: ObservableObject {
         persistCatalog()
         if activeWorkspace == reference {
             workspaceRevision = UUID(); previews.invalidate(); isRendering = false
-            cropDraft = nil
+            cropDraft = nil; levelingHorizon = false; straightenGesture = false
             activeWorkspace = nil; store = nil; photos = []; selectedID = nil; selectedIDs = []; preview = nil
             if let next = workspaces.first { open(next) }
         }
@@ -162,7 +187,7 @@ final class AppModel: ObservableObject {
         editedSinceSave = false; sessionTouched = false; saveStatus = "All edits saved"
         settings = selectedID.map { targetStore.settings(for: $0) } ?? ImageSettings()
         undoStack = []; redoStack = []; gestureStart = nil; updateUndoState()
-        cropDraft = nil
+        cropDraft = nil; levelingHorizon = false; straightenGesture = false
         resetGeometryPreview()
         requestPreview()
     }
@@ -170,7 +195,7 @@ final class AppModel: ObservableObject {
     func open(_ reference: WorkspaceReference) {
         guard flush() else { return }
         activeWorkspace = reference; folder = ""; photos = []; selectedID = nil; selectedIDs = []; preview = nil
-        cropDraft = nil
+        cropDraft = nil; levelingHorizon = false; straightenGesture = false
         settings = ImageSettings(); showingOriginal = false; previewError = nil; isLoading = true
         previews.invalidate(); isRendering = false
         let token = UUID(); workspaceRevision = token
@@ -215,6 +240,7 @@ final class AppModel: ObservableObject {
         }
         cropDraft = nil
         showingOriginal = false; pickingColor = false; showMask = false
+        levelingHorizon = false; straightenGesture = false; wipePosition = 0.5
         preview = nil; previewError = nil
         viewport = PhotoViewport(); requestedDetailViewport = nil
         undoStack = []; redoStack = []; gestureStart = nil; updateUndoState()
@@ -399,8 +425,8 @@ final class AppModel: ObservableObject {
         isRendering = true
         requestedDetailViewport = desiredDetailViewport
         var value = settings.adjustments
-        if isCropping { value.geometry.crop = nil }
-        previews.request(PreviewRequest(url: photo.url, adjustments: value, longEdge: gestureStart == nil ? 1800 : 1000, detailViewport: requestedDetailViewport))
+        if isCropping { value.geometry.crop = nil; value.geometry.straightenAngle = straightenDraft }
+        previews.request(PreviewRequest(url: photo.url, adjustments: value, longEdge: gestureStart == nil && !straightenGesture ? 1800 : 1000, detailViewport: requestedDetailViewport))
     }
 
     private var desiredDetailViewport: DetailViewport? {
@@ -451,11 +477,32 @@ final class AppModel: ObservableObject {
     }
     func beginCrop() {
         guard canEdit, preview != nil, !isCropping else { return }
+        distractionFree = false; comparisonWipe = false
+        straightenDraft = settings.adjustments.geometry.straightenAngle
+        straightenGesture = false; levelingHorizon = false
         cropDraft = settings.adjustments.geometry.crop ?? .full
         cropAspect = .free
         resetGeometryPreview(); requestPreview()
     }
     func updateCrop(_ value: CropRegion) { guard isCropping else { return }; cropDraft = value }
+    func setStraightenDraft(_ value: Double) {
+        guard isCropping, value.isFinite else { return }
+        let angle = min(15, max(-15, value))
+        guard angle != straightenDraft else { return }
+        straightenDraft = angle
+        // Keep completed frames flowing during a drag; never invalidate each pending angle.
+        requestPreview()
+    }
+    func straightenEditing(_ editing: Bool) {
+        guard isCropping else { return }
+        straightenGesture = editing
+        if !editing { requestPreview() }
+    }
+    func levelHorizon(by degrees: Double) {
+        guard isCropping, !isRendering else { return }
+        levelingHorizon = false
+        setStraightenDraft(straightenDraft+degrees)
+    }
     func setCropAspect(_ value: CropAspect) {
         cropAspect = value
         if let ratio = cropRatio, let size = preview?.sourceSize, let draft = cropDraft {
@@ -471,12 +518,15 @@ final class AppModel: ObservableObject {
         cropDraft = nil
         var value = settings.adjustments
         value.geometry.crop = draft == .full ? nil : draft
+        value.geometry.straightenAngle = straightenDraft
+        levelingHorizon = false; straightenGesture = false
         resetGeometryPreview()
         if value != settings.adjustments { setAdjustments(value) } else { requestPreview() }
     }
     func cancelCrop() {
         guard isCropping else { return }
         cropDraft = nil
+        levelingHorizon = false; straightenGesture = false
         resetGeometryPreview(); requestPreview()
     }
     func clearCrop() {

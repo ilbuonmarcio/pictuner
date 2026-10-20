@@ -45,6 +45,10 @@ final class InspectorLayoutTests: XCTestCase {
         model.beginCrop()
         XCTAssertTrue(model.isCropping)
         assertFits()
+        let straighten = NSHostingView(rootView: StraightenToolbar().environmentObject(model).frame(width: 400))
+        straighten.layoutSubtreeIfNeeded()
+        XCTAssertLessThanOrEqual(straighten.fittingSize.width, 400)
+        XCTAssertEqual(straighten.fittingSize.height, 36, accuracy: 0.5)
         model.cancelCrop()
         for _ in 0..<200 where model.isRendering { try await Task.sleep(for: .milliseconds(20)) }
         XCTAssertTrue(model.prepareToQuit())

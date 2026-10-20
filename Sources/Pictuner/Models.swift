@@ -124,8 +124,8 @@ struct ImageSettings: Codable, Equatable, Sendable {
 }
 
 struct WorkspaceDocument: Codable, Sendable {
-    var schemaVersion = 4
-    var renderVersion = 2
+    var schemaVersion = 5
+    var renderVersion = 3
     var workspaceID = UUID()
     var images: [String: ImageSettings] = [:]
     var lastImage: String?

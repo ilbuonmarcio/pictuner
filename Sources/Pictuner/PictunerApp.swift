@@ -24,6 +24,15 @@ struct PicTunerApp: App {
             }
             CommandGroup(after: .toolbar) {
                 Divider()
+                Button(model.distractionFree ? "Exit Distraction-Free Mode" : "Distraction-Free Mode", action: model.toggleDistractionFree)
+                    .keyboardShortcut("f", modifiers: [.command, .shift]).disabled(model.isCropping)
+                Button(model.comparisonWipe ? "Hide Before/After Wipe" : "Show Before/After Wipe", action: model.toggleComparisonWipe)
+                    .keyboardShortcut("\\").disabled(model.preview == nil || model.isCropping)
+                Button("Move Comparison Divider Left") { model.setWipePosition(model.wipePosition-0.05) }
+                    .keyboardShortcut(.leftArrow, modifiers: .option).disabled(model.activeWipe == nil)
+                Button("Move Comparison Divider Right") { model.setWipePosition(model.wipePosition+0.05) }
+                    .keyboardShortcut(.rightArrow, modifiers: .option).disabled(model.activeWipe == nil)
+                Divider()
                 Button("Zoom In") { model.zoomBy(sqrt(2)) }.keyboardShortcut("+", modifiers: .command).disabled(model.preview == nil || model.isCropping)
                 Button("Zoom Out") { model.zoomBy(1/sqrt(2)) }.keyboardShortcut("-", modifiers: .command).disabled(model.preview == nil || model.isCropping)
                 Button("Fit to Window") { model.setZoom(nil) }.keyboardShortcut("0", modifiers: .command).disabled(model.preview == nil || model.isCropping)
@@ -36,6 +45,8 @@ struct PicTunerApp: App {
             }
             CommandMenu("Photo") {
                 Button("Crop…", action: model.beginCrop).keyboardShortcut("k").disabled(!model.canEdit || model.preview == nil || model.isCropping)
+                Button("Straighten…") { model.beginCrop(); model.levelingHorizon = model.isCropping }
+                    .disabled(!model.canEdit || model.preview == nil || model.isCropping)
                 Button("Rotate Left 90°") { model.rotate(clockwise: false) }.disabled(!model.canEdit || model.isCropping)
                 Button("Rotate Right 90°") { model.rotate(clockwise: true) }.disabled(!model.canEdit || model.isCropping)
                 Button("Flip Horizontally") { model.flip(horizontal: true) }.disabled(!model.canEdit || model.isCropping)

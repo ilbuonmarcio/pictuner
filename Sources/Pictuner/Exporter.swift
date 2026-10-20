@@ -10,14 +10,64 @@ enum ExportScope: String, CaseIterable {
     case favorites = "Marked Favorites"
 }
 enum OutputFormat: String, CaseIterable { case jpeg = "JPEG", png = "PNG" }
+enum PNGBitDepth: String, CaseIterable { case eight = "8-bit", sixteen = "16-bit" }
 enum CollisionPolicy: String, CaseIterable { case rename = "Add a number", skip = "Skip existing" }
-struct ExportOptions {
+enum ExportRecipe: String, CaseIterable, Identifiable {
+    case webPage = "Web Page"
+    case instagram = "Instagram"
+    case fullResolution = "Full Resolution"
+    case lossless = "Lossless"
+    var id: String { rawValue }
+    var quality: Double {
+        switch self { case .webPage: return 0.8; case .fullResolution: return 0.95; case .instagram, .lossless: return 1 }
+    }
+    var summary: String {
+        switch self {
+        case .webPage: return "Full resolution · JPEG 80%"
+        case .instagram: return "Full resolution · JPEG 100%"
+        case .fullResolution: return "Full resolution · JPEG 95%"
+        case .lossless: return "Full resolution · 16-bit PNG"
+        }
+    }
+    var help: String {
+        switch self {
+        case .instagram: return "\(summary). Full resolution is retained without a forced crop or resize; upload processing is controlled by Instagram."
+        case .lossless: return "\(summary). Lossless compression of the rendered sRGB image; source RAW data is not embedded."
+        case .webPage, .fullResolution: return "\(summary). Keeps the current crop and orientation without downsizing."
+        }
+    }
+    func apply(to options: inout ExportOptions) {
+        // Recipes affect encoding only. Keep the user's scope, folder and collision choices.
+        options.format = self == .lossless ? .png : .jpeg
+        options.quality = quality
+        options.longEdge = 0
+        options.pngBitDepth = self == .lossless ? .sixteen : .eight
+    }
+    func matches(_ options: ExportOptions) -> Bool {
+        guard options.longEdge == 0 else { return false }
+        if self == .lossless { return options.format == .png && options.pngBitDepth == .sixteen }
+        return options.format == .jpeg && abs(options.quality-quality) < 0.000001
+    }
+}
+struct ExportOptions: Equatable {
     var scope = ExportScope.ready
     var format = OutputFormat.jpeg
     var quality = 0.9
+    var pngBitDepth = PNGBitDepth.eight
     var longEdge = 0.0
     var preserveFolders = true
     var collision = CollisionPolicy.rename
+    var recipe: ExportRecipe? { ExportRecipe.allCases.first { $0.matches(self) } }
+    var encodingIsDefault: Bool {
+        let defaults = ExportOptions()
+        return format == defaults.format && quality == defaults.quality && longEdge == defaults.longEdge && pngBitDepth == defaults.pngBitDepth
+    }
+
+    mutating func resetEncoding() {
+        let defaults = ExportOptions()
+        format = defaults.format; quality = defaults.quality
+        longEdge = defaults.longEdge; pngBitDepth = defaults.pngBitDepth
+    }
 }
 struct ExportItem { let photo: Photo; let adjustments: Adjustments }
 
@@ -79,14 +129,15 @@ enum Exporter {
                     let source = try renderer.load(item.photo.url)
                     var image = try renderer.render(source, adjustments: item.adjustments)
                     if options.longEdge > 0 { image = renderer.resize(image, longEdge: options.longEdge) }
-                    let cgImage = try renderer.cgImage(image)
+                    let cgImage = try renderer.cgImage(image, format: options.format == .png && options.pngBitDepth == .sixteen ? .RGBA16 : .RGBA8)
                     let data = NSMutableData()
                     let type = options.format == .jpeg ? UTType.jpeg.identifier : UTType.png.identifier
                     guard let target = CGImageDestinationCreateWithData(data, type as CFString, 1, nil) else {
                         throw PictunerError.message("Could not create the output encoder.")
                     }
                     // Deliberately do not copy EXIF/GPS in this first version. The rendered CGImage carries sRGB.
-                    CGImageDestinationAddImage(target, cgImage, [kCGImageDestinationLossyCompressionQuality: options.quality] as CFDictionary)
+                    let properties: [CFString: Any] = options.format == .jpeg ? [kCGImageDestinationLossyCompressionQuality: options.quality] : [:]
+                    CGImageDestinationAddImage(target, cgImage, properties as CFDictionary)
                     guard CGImageDestinationFinalize(target) else { throw PictunerError.message("The output encoder failed.") }
                     if cancellation.cancelled { return }
                     let relative = options.preserveFolders ? item.photo.relativePath : item.photo.name

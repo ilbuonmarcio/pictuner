@@ -47,14 +47,14 @@ final class PictunerTests: XCTestCase {
         try original.write(to: url)
         let store = WorkspaceStore(root: root)
         XCTAssertNil(store.failure)
-        XCTAssertEqual(store.document.schemaVersion, 4)
+        XCTAssertEqual(store.document.schemaVersion, 5)
         XCTAssertEqual(store.document.lastImage, "nested/car.nef")
         XCTAssertEqual(store.settings(for: "nested/car.nef"), settings)
         XCTAssertFalse(store.settings(for: "nested/car.nef").exportReady)
         XCTAssertEqual(try Data(contentsOf: url), original, "Loading must not rewrite existing metadata")
         XCTAssertTrue(store.save())
         let reopened = WorkspaceStore(root: root)
-        XCTAssertEqual(reopened.document.schemaVersion, 4)
+        XCTAssertEqual(reopened.document.schemaVersion, 5)
         XCTAssertEqual(reopened.settings(for: "nested/car.nef"), settings)
     }
 
