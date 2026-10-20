@@ -8,6 +8,7 @@ struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("workspaceSidebarVisible") private var workspaceSidebarVisible = true
     @AppStorage("compositionGridVisible") private var compositionGridVisible = false
+    @State private var showingMetadataControls = false
     var body: some View {
         HStack(spacing: 0) {
             if workspaceSidebarVisible && !model.distractionFree {
@@ -83,6 +84,19 @@ struct ContentView: View {
                     .disabled(model.distractionFree)
             }
             ToolbarItem(placement: .primaryAction) {
+                Button { showingMetadataControls.toggle() } label: {
+                    Image(systemName: "text.below.photo")
+                        .foregroundStyle(model.settings.adjustments.metadataOverlay.enabled ? accent : .secondary)
+                }
+                .accessibilityLabel("Date & GPS")
+                .help("Date & GPS label")
+                .disabled(model.preview == nil || !model.canEdit || model.isCropping)
+                .popover(isPresented: $showingMetadataControls) {
+                    MetadataOverlayControls().tint(accent)
+                        .onExitCommand { showingMetadataControls = false }
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button(action: model.toggleComparisonWipe) {
                     Image(systemName: "rectangle.lefthalf.filled")
                         .foregroundStyle(model.comparisonWipe ? accent : .secondary)
@@ -102,7 +116,11 @@ struct ContentView: View {
                     .disabled(model.photos.isEmpty || model.exporting || model.isCropping)
             }
         }
-        .onExitCommand(perform: model.escapePreview)
+        .onExitCommand {
+            if showingMetadataControls { showingMetadataControls = false }
+            else { model.escapePreview() }
+        }
+        .onChange(of: model.isCropping) { _, cropping in if cropping { showingMetadataControls = false } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in model.showingOriginal = false }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in model.showingOriginal = false }
         .sheet(isPresented: $model.showExportSheet) { ExportSheet().tint(accent) }

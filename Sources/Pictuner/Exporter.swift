@@ -127,7 +127,7 @@ enum Exporter {
             autoreleasepool {
                 do {
                     let source = try renderer.load(item.photo.url)
-                    var image = try renderer.render(source, adjustments: item.adjustments)
+                    var image = try renderer.render(source, adjustments: item.adjustments, metadata: renderer.metadata)
                     if options.longEdge > 0 { image = renderer.resize(image, longEdge: options.longEdge) }
                     let cgImage = try renderer.cgImage(image, format: options.format == .png && options.pngBitDepth == .sixteen ? .RGBA16 : .RGBA8)
                     let data = NSMutableData()

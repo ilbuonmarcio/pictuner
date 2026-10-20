@@ -71,8 +71,8 @@ final class PhotoEffectsTests: XCTestCase {
         XCTAssertEqual(store.settings(for: "missing.nef").adjustments, existing)
         XCTAssertTrue(store.save())
         let reopened = WorkspaceStore(root: root)
-        XCTAssertEqual(reopened.document.schemaVersion, 5)
-        XCTAssertEqual(reopened.document.renderVersion, 3)
+        XCTAssertEqual(reopened.document.schemaVersion, 6)
+        XCTAssertEqual(reopened.document.renderVersion, 4)
         XCTAssertTrue(reopened.settings(for: "missing.nef").exportReady)
     }
 

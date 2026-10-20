@@ -20,7 +20,8 @@ Browse your photos, tune their look, and export the keepers. PicTuner works dire
 - **Distraction-free viewing.** Hide the surrounding panels with ⇧⌘F and return with Escape. Navigation, zoom, and hold-Space comparison stay available.
 - **Before/after wipe.** Toggle with ⌘\, then drag the divider between original and edited views, including while zoomed.
 - **Original comparison and histogram.** Hold Space or the Original button to compare, with your current framing and zoom retained. View RGB/luminance histograms and clipping indicators.
-- **Reusable edits.** Save color presets, copy and paste adjustments, or apply them to multiple selected photos. Each photo keeps its own crop and orientation.
+- **Reusable edits.** Save color presets, copy and paste adjustments, or apply them to multiple selected photos. Each photo keeps its own framing and Date & GPS label.
+- **Date & GPS labels.** Add the photo’s EXIF capture time and coordinates from the toolbar, choose one of six positions, and adjust margins and text size. Labels appear in exported copies; missing fields stay absent.
 - **Export recipes.** Choose Web Page (full-resolution JPEG 80%), Instagram (JPEG 100%), Full Resolution (JPEG 95%), or Lossless (16-bit PNG). All four keep full rendered dimensions, and settings remain editable.
 - **Deliberate export.** Mark photos with **Include in Export**, then export just those photos as JPEG or PNG, with optional resizing and subfolder preservation.
 - **RAW support.** Develop camera RAW files using macOS’s RAW decoder, alongside JPEG and PNG. Supported cameras and formats depend on the host macOS version.
@@ -101,7 +102,7 @@ PicTuner stores per-photo adjustments, framing, and flags in **`.pictuner/worksp
 
 - Editing and export never rewrite, rename, or delete source photos.
 - Preview, histogram, and export use the same ordered adjustment pipeline. For RAW comparison, “original” means the default RAW development, with the current crop and orientation retained.
-- Exports are separate sRGB JPEG/PNG copies. Source EXIF and GPS metadata are not copied to the output.
+- Exports are separate sRGB JPEG/PNG copies. Source EXIF and GPS tags are not copied to the output. Enabled Date & GPS labels are rendered into the picture.
 - Export destinations must be outside every registered workspace. Existing output names can be renamed or skipped, never replaced; aliases and symbolic links are checked to protect sources.
 - **Reset Workspace…** in a workspace’s context menu clears edits and favorite/reject/export flags throughout that workspace after confirmation. It keeps source files and saved presets. This reset cannot be undone.
 

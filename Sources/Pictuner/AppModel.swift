@@ -338,13 +338,14 @@ final class AppModel: ObservableObject {
         scheduleSave()
     }
     func savedSettings(for photo: Photo) -> ImageSettings { photo.id == selectedID ? settings : store?.settings(for: photo.id) ?? ImageSettings() }
-    // Framing belongs to each photo; reusable color edits leave it alone.
+    // Framing and EXIF captions belong to each photo; reusable color edits leave them alone.
     func applyColorAdjustments(_ value: Adjustments) {
         var value = value; value.geometry = settings.adjustments.geometry
+        value.metadataOverlay = settings.adjustments.metadataOverlay
         setAdjustments(value)
     }
     func copyAdjustments() {
-        var value = settings.adjustments; value.geometry = ImageGeometry()
+        var value = settings.adjustments; value.geometry = ImageGeometry(); value.metadataOverlay = MetadataOverlay()
         copiedAdjustments = value; objectWillChange.send()
     }
     func pasteAdjustments() { if let value = copiedAdjustments { applyColorAdjustments(value) } }
@@ -355,6 +356,7 @@ final class AppModel: ObservableObject {
         for id in selectedIDs where id != selectedID {
             var other = store?.settings(for: id) ?? ImageSettings()
             var value = settings.adjustments; value.geometry = other.adjustments.geometry
+            value.metadataOverlay = other.adjustments.metadataOverlay
             guard other.adjustments != value else { continue }
             previous[id] = other.adjustments
             other.adjustments = value
@@ -381,7 +383,7 @@ final class AppModel: ObservableObject {
 
     func savePreset(name: String) {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        var value = settings.adjustments; value.geometry = ImageGeometry()
+        var value = settings.adjustments; value.geometry = ImageGeometry(); value.metadataOverlay = MetadataOverlay()
         presets.append(UserPreset(name: name, adjustments: value))
         do {
             try FileManager.default.createDirectory(at: supportURL, withIntermediateDirectories: true)
@@ -425,7 +427,10 @@ final class AppModel: ObservableObject {
         isRendering = true
         requestedDetailViewport = desiredDetailViewport
         var value = settings.adjustments
-        if isCropping { value.geometry.crop = nil; value.geometry.straightenAngle = straightenDraft }
+        if isCropping {
+            value.geometry.crop = nil; value.geometry.straightenAngle = straightenDraft
+            value.metadataOverlay.enabled = false
+        }
         previews.request(PreviewRequest(url: photo.url, adjustments: value, longEdge: gestureStart == nil && !straightenGesture ? 1800 : 1000, detailViewport: requestedDetailViewport))
     }
 

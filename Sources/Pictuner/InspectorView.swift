@@ -47,7 +47,7 @@ struct InspectorView: View {
                 Spacer()
                 Button("Reset All Edits") { model.setAdjustments(Adjustments()) }
                     .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
-                    .help("Reset color, effects, crop, rotation and mirror settings")
+                    .help("Reset all photo edits, framing and Date & GPS label")
                     .disabled(!model.settings.adjustments.isEdited)
             }.controlSize(.small).padding(.horizontal, 12).frame(height: 36)
                 .disabled(!model.canEdit || model.isCropping)

@@ -11,6 +11,7 @@ Read `docs/SPEC.md` and `docs/ARCHITECTURE.md` before implementing features. Kee
 
 - Never overwrite, modify, rename, or delete source images as part of editing or export.
 - Apply crop, fine-angle straightening, quarter-turn rotation, and horizontal/vertical mirror non-destructively in the shared source-resolution pipeline. Keep framing out of reusable color presets and batch/copy operations. Crop and straighten drafts must be cancellable and commit together as one undo action. Trim rotated edges to avoid transparent wedges.
+- Keep the optional Date & GPS plate in the shared edited preview/detail/histogram/export pipeline, anchored inside the final crop with proportional margins. Never infer missing EXIF values or time zones. Original/sampling/mask exclude the plate; presets and copy/batch color edits preserve each photo’s own label. Continue excluding embedded source EXIF/GPS tags from exports.
 - Store edits as metadata and autosave them across image selection changes and app restarts.
 - Support RAW images in the initial release; do not silently reduce scope to JPEG/PNG.
 - Use the same ordered adjustment pipeline for preview, histogram, and export.

@@ -67,8 +67,8 @@ struct ExportSheet: View {
                     reset("Filename collisions", \.collision)
                 }
             }.formStyle(.grouped).frame(height: 275)
-            Text("sRGB · Metadata excluded").font(.system(size: 11)).foregroundStyle(.secondary)
-                .help("Source EXIF and GPS metadata are not included.")
+            Text("sRGB · Embedded metadata excluded").font(.system(size: 11)).foregroundStyle(.secondary)
+                .help("Source EXIF and GPS tags are excluded. Enabled Date & GPS labels are rendered into the picture.")
             if model.exportItems().isEmpty {
                 Text("Mark photos using Include in Export.").font(.system(size: 11)).foregroundStyle(.secondary)
             }

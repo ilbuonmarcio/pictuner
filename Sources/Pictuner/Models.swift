@@ -48,6 +48,7 @@ struct Adjustments: Codable, Equatable, Sendable {
     var vignetteSoftness = 0.5
     var selective = SelectiveColor()
     var geometry = ImageGeometry()
+    var metadataOverlay = MetadataOverlay()
     var isEdited: Bool { self != Adjustments() }
 
     init() {}
@@ -55,7 +56,7 @@ struct Adjustments: Codable, Equatable, Sendable {
         case exposure, brightness, contrast, highlights, shadows, temperature, tint, saturation, hue
         case vibrance, clarity, texture, sharpening, sharpeningRadius, noiseReduction, glow, glowRadius
         case shadowHue, shadowTint, highlightHue, highlightTint, gradingBalance, grain, grainSize
-        case monochrome, sepia, vignette, vignetteRadius, vignetteSoftness, selective, geometry
+        case monochrome, sepia, vignette, vignetteRadius, vignetteSoftness, selective, geometry, metadataOverlay
     }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -75,6 +76,7 @@ struct Adjustments: Codable, Equatable, Sendable {
         vignetteSoftness = try values.decode(Double.self, forKey: .vignetteSoftness)
         selective = try values.decode(SelectiveColor.self, forKey: .selective)
         geometry = try values.decodeIfPresent(ImageGeometry.self, forKey: .geometry) ?? ImageGeometry()
+        metadataOverlay = try values.decodeIfPresent(MetadataOverlay.self, forKey: .metadataOverlay) ?? MetadataOverlay()
         vibrance = try values.decodeIfPresent(Double.self, forKey: .vibrance) ?? 0
         clarity = try values.decodeIfPresent(Double.self, forKey: .clarity) ?? 0
         texture = try values.decodeIfPresent(Double.self, forKey: .texture) ?? 0
@@ -124,8 +126,8 @@ struct ImageSettings: Codable, Equatable, Sendable {
 }
 
 struct WorkspaceDocument: Codable, Sendable {
-    var schemaVersion = 5
-    var renderVersion = 3
+    var schemaVersion = 6
+    var renderVersion = 4
     var workspaceID = UUID()
     var images: [String: ImageSettings] = [:]
     var lastImage: String?

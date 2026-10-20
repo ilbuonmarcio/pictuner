@@ -130,6 +130,15 @@ Controls:
 
 Persist all parameters. Handle hue wraparound, especially red, without a discontinuity. Sample and evaluate color in a consistent image color space, independent of display zoom or monitor profile. Initial scope is one sampled color range per image. Similar colors elsewhere in the image are also affected; spatial brushes and subject masks are future work.
 
+## Date & GPS label
+
+- The native window toolbar’s **Date & GPS** button opens per-photo label controls without consuming inspector space. Default off. Independently include capture date/time and GPS coordinates; omit missing fields and show their absence in the controls. Never substitute filesystem dates or inferred locations.
+- Use EXIF DateTimeOriginal, retaining the recorded wall clock and displaying OffsetTimeOriginal when available. Do not invent a time zone. Format decimal coordinates to five places with N/S/E/W; no location lookup or network access.
+- Render white text on a subtle dark rounded plate, with a smaller monospaced coordinate line. Offer top/bottom left, center and right positions. Margin defaults to 3.5% of the final cropped photo’s shorter edge (range 1–12%); text size defaults to 2.5% (range 1.2–5%). Both update live, with individual Reset buttons; position also has Reset. Scale the plate to fit unusually narrow images without sacrificing the outside margin.
+- Keep the plate aligned to the final cropped/oriented image through zoom and detail rendering. Show it in the edited preview/histogram and bake it into exported copies. Original comparison, eyedropper sampling and selective mask exclude it; hide it while drafting a crop.
+- Autosave settings per photo, support undo/redo and reset, and migrate old images to disabled. Presets, copy/paste and batch color edits neither copy the label nor change each destination’s label settings.
+- Enabled labels are visible image content in exports, including GPS when selected. Continue excluding source EXIF/GPS tags from the output file. State the export inclusion in the controls and clarify embedded-metadata exclusion in the export tooltip.
+
 ## Histogram
 
 - Place the histogram at the top of the right inspector.
@@ -221,7 +230,7 @@ These phases are implementation order, not permission to omit later phases from 
 - App distribution/signing and supported hardware.
 - Exact RAW compatibility matrix and baseline development defaults.
 - Adjustment ranges, preset combination behavior, and histogram/clipping conventions.
-- Export metadata preservation/privacy policy.
+- Optional source metadata preservation beyond the current embedded-tag exclusion policy.
 - External rename detection, concurrent workspace access, and any read-only persistence fallback.
 - Measured responsiveness and memory targets using representative photo libraries.
 

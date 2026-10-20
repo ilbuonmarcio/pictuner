@@ -4,6 +4,8 @@ Updated: 2026-10-20. This is a local development app, not a signed/notarized dis
 
 ## Implemented
 
+- Optional per-photo Date & GPS label in a toolbar popover: EXIF capture clock/offset and decimal coordinates, independent date/GPS switches, six positions, live proportional margin/text-size controls and resets. Rounded dark plate is composited after effects, aligned through crop/rotation/zoom and included in exports/histograms. Original, sampling/masks and crop drafts exclude it. Settings autosave, undo, and migrate disabled (schema 6/render 4); presets/copy/batch preserve each destination label. No guessed dates, geocoding or copied source EXIF/GPS tags.
+
 - Hiding Workspaces moves the filmstrip below the right inspector, reclaiming its 118-point height plus divider for the photo preview. Showing Workspaces restores it below the preview; the picker scrolls to the active photo when relocated. Photo/crop controls stay beside the preview. Compact card spacing keeps all inspector controls visible at the existing minimum size, retaining slider/label sizes and histogram height.
 
 - Four built-in export recipes: Web Page (JPEG 80%), Instagram (JPEG 100%), Full Resolution (JPEG 95%), and Lossless (16-bit PNG), all at full rendered resolution. Recipes preserve photo framing, export approval/scope and file-handling choices; manual encoding changes show Custom. PNG bit depth is independently selectable and recipe/field Reset buttons remain available. 16-bit PNG is encoded from the full rendered source without the 8-bit preview conversion.
@@ -61,6 +63,8 @@ Updated: 2026-10-20. This is a local development app, not a signed/notarized dis
 - No bokeh, spatial masks, brushes, or network services.
 
 ## Validation record
+
+Date & GPS label (2026-10-20): all 74 tests pass with the Nikon RAW fixture, including seven new overlay tests. Coverage verifies actual JPEG and RAW capture metadata, absent/invalid dates and coordinates, zero-coordinate handling, six rendered anchors and outside margins, narrow-image fitting, crop/rotation alignment, source-detail/preview/histogram/16-bit-export agreement, embedded tag exclusion, unchanged source bytes, legacy/default/corrupt metadata behavior, live gesture undo and persistence, and isolation from presets/copy/batch. The local app build passed. Native inspection on the public portrait fixture verified the label, position menu, spacing/reset controls, restored per-photo settings after relaunch, Escape dismissal, and the intact inspector with both sidebar/filmstrip placements at minimum size. Nine focused overlay/layout tests also pass after the final UI polish.
 
 Filmstrip relocation (2026-10-20): all 67 tests pass with the Nikon RAW fixture. Expanded inspector layout coverage verifies both placements at 900/1000/1100-point column heights, selective color on/off and populated presets. The app build passed. Native inspection with a portrait photo confirmed picker relocation, all controls fitting at minimum 1340 × 900 content size, restoration when showing Workspaces, and selected-photo/100% zoom retention through sidebar and distraction-free toggles.
 

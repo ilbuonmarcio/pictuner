@@ -52,7 +52,8 @@ Define one versioned, deterministic adjustment order. A starting proposal is:
 7. Selective color.
 8. Black and white/sepia treatment, then shadow/highlight color grading.
 9. Source-pixel sharpening, proportional-radius bloom, and vignette.
-10. Deterministic monochrome grain, then output color conversion.
+10. Deterministic monochrome grain.
+11. Optional Date & GPS plate in final-image coordinates, then output color conversion.
 
 Validate this order visually before freezing it. Document interactions such as a monochrome preset removing color retained by selective color. Use resolution-independent effect parameters so vignette and other spatial effects scale consistently.
 
@@ -78,8 +79,8 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 ```json
 {
-  "schemaVersion": 5,
-  "renderVersion": 3,
+  "schemaVersion": 6,
+  "renderVersion": 4,
   "workspaceID": "UUID",
   "images": {
     "shoot/car.raw": {
@@ -95,7 +96,7 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 This illustrates structure, not a finalized settings schema. Define typed adjustment fields, neutral defaults, effect enablement, ranges and selective-color parameters before implementation. Use stable workspace/image identities as needed; relative paths alone do not solve external renames.
 
-Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1–4 to schema 5/render version 3 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
+Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1–5 to schema 6/render version 4 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
 
 Schema 3 adds `adjustments.geometry`: clockwise `quarterTurns`, two mirror flags, and an optional normalized bottom-left `crop` rectangle in the rotated/mirrored coordinate system. Older adjustments and presets decode with neutral geometry. Invalid crop bounds reject metadata decoding, preserving the existing file. Geometry edits use the existing adjustment undo records and autosave. Reusable color presets/copy/batch operations preserve each destination's geometry.
 
@@ -126,11 +127,21 @@ Store app-wide workspace registrations, security-scoped bookmarks if needed, and
 - Restore security-scoped access correctly when required by the chosen sandbox/distribution model.
 - Treat comparison as temporary UI state, separate from adjustments and undo history.
 
+## EXIF plate rendering
+
+`PhotoMetadata` reads ImageIO EXIF/GPS properties on the render/export queue and caches the active source’s parsed values with the decoded image and modification date. DateTimeOriginal is validated and formatted as a wall clock in a fixed POSIX formatter; an available offset is shown verbatim after validation. Missing values are absent, never inferred. GPS values require valid ranges and references; zero coordinates are valid. There is no geocoding.
+
+Schema 6/render version 4 adds `adjustments.metadataOverlay`: enablement, date/GPS flags, six anchors, and proportional margin/text size. Missing settings decode disabled; invalid dimensions preserve the existing metadata file by rejecting decoding. Keeping it in adjustment snapshots gives the label ordinary per-photo undo, live gesture grouping, reset, export snapshots and autosave. Reusable color operations explicitly strip the label from saved/copied settings and preserve each destination’s label, like geometry.
+
+`MetadataStamp` rasterizes a small Core Text plate at fixed font metrics (192-point primary text, smaller Menlo coordinates), caching only the current text bitmap per Renderer. It scales and anchors that plate to the final image’s shorter edge, shrinks it to respect margins on narrow images, composites after grain and crops to the render input. Fixed metrics keep preview/detail footprints consistent. Export passes metadata from its own loaded source explicitly; arbitrary CIImage render calls default to absent metadata. Detail rendering supplies the full scaled source dimensions and retains global offsets, so a partially visible label matches the overview without source-sized overlay buffers. Original, sampling and mask branches do not receive the plate; edited histogram/clipping include it. Crop drafts suppress it without changing saved settings.
+
+`MetadataOverlayControls` lives in a native toolbar popover, leaving the two-column inspector and photo toolbar unchanged. It shows available values/missing-field state, export inclusion, position/spacing controls and resets. Sliders use the same live-preview and undo-gesture path as existing adjustments. All recipes render enabled labels into pixels while continuing to omit source EXIF/GPS tags; the export footer now distinguishes embedded metadata from visible labels.
+
 ## Export recipes and output depth
 
 `ExportRecipe` defines four fixed recipes: Web Page (JPEG 0.80), Instagram (JPEG 1.0), Full Resolution (JPEG 0.95), and Lossless (PNG 16-bit). Each sets `longEdge` to zero so export retains full rendered dimensions. Applying a recipe preserves scope, folder structure and collision policy. `ExportOptions.recipe` is derived from active encoding settings rather than a separate label that can drift out of sync. Manual format/quality/size/depth changes show Custom when no recipe matches; irrelevant JPEG quality does not change a PNG recipe. Reset restores only encoding fields. The export sheet keeps its height stable during recipe/custom transitions and uses tooltips for recipe details.
 
-PNG bit depth defaults to eight; `PNGBitDepth.sixteen` selects `CIFormat.RGBA16` at the final `Renderer.cgImage` conversion. Preview, histogram and existing default exports continue using RGBA8. ImageIO receives the resulting 16-bit CGImage directly for PNG encoding; no intermediate 8-bit preview enters this path. PNG receives no lossy-compression-quality property. All formats continue using sRGB and omit source EXIF/GPS. No workspace metadata schema change is needed for session-only export options.
+PNG bit depth defaults to eight; `PNGBitDepth.sixteen` selects `CIFormat.RGBA16` at the final `Renderer.cgImage` conversion. Preview, histogram and existing default exports continue using RGBA8. ImageIO receives the resulting 16-bit CGImage directly for PNG encoding; no intermediate 8-bit preview enters this path. PNG receives no lossy-compression-quality property. All formats continue using sRGB and omit source EXIF/GPS tags; enabled Date & GPS plates remain visible pixels. No workspace metadata schema change is needed for session-only export options.
 
 Instagram deliberately uses a full-resolution, maximum-quality sRGB JPEG without automatic resizing/cropping. The official help page could not be reliably retrieved during implementation, so no current dimension/aspect limit is asserted or encoded. Revisit only with verified platform guidance; do not promise that any recipe controls Instagram's upload processing.
 
@@ -140,7 +151,7 @@ Validate all planned destinations before rendering. Resolve path aliases/symlink
 
 Export jobs capture source references, settings, output dimensions, color policy and destination policy at creation. Bound concurrency and memory for RAW processing. Cancellation stops scheduling more work and cleans up incomplete temporary output while preserving completed exports.
 
-The first implementation restricts output to outside registered workspaces and offers rename/skip only. It publishes a temporary output with `link(2)`, which atomically refuses an existing destination, including symbolic/hard links. It never replaces an existing file. Outputs carry sRGB and omit source EXIF/GPS.
+The first implementation restricts output to outside registered workspaces and offers rename/skip only. It publishes a temporary output with `link(2)`, which atomically refuses an existing destination, including symbolic/hard links. It never replaces an existing file. Outputs carry sRGB and omit source EXIF/GPS tags, while rendering explicitly enabled Date & GPS plates into the picture.
 
 ## Verification approach
 

@@ -22,6 +22,7 @@ struct PreviewResult {
     let originalHistogram: HistogramData
     let sourceSize: CGSize
     var detail: DetailResult? = nil
+    var metadata = PhotoMetadata()
 }
 
 struct DetailResult {
@@ -39,9 +40,11 @@ final class Renderer {
     let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     lazy var context = CIContext(options: [.workingColorSpace: colorSpace, .outputColorSpace: colorSpace, .cacheIntermediates: false])
     private let effects = PhotoEffects()
+    private let metadataStamp = MetadataStamp()
     private var cachedURL: URL?
     private var cachedDate: Date?
     private var cachedImage: CIImage?
+    private(set) var metadata = PhotoMetadata()
     private struct PreparedPreview {
         let baseline: CIImage
         let original: CGImage
@@ -121,6 +124,7 @@ final class Renderer {
         }
         let normalized = image.transformed(by: CGAffineTransform(translationX: -image.extent.minX, y: -image.extent.minY))
         cachedURL = url; cachedDate = date; cachedImage = normalized
+        metadata = PhotoMetadata.read(url)
         preparedPreviews.removeAll()
         preparedDetail = nil
         return normalized
@@ -185,8 +189,9 @@ final class Renderer {
         return image.cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
     }
 
-    func render(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil, sourceScale: Double = 1) throws -> CIImage {
-        try renderColors(geometry(input, a.geometry), adjustments: a, referenceSize: referenceSize, sourceScale: sourceScale)
+    func render(_ input: CIImage, adjustments a: Adjustments, metadata: PhotoMetadata = PhotoMetadata(), referenceSize: CGSize? = nil, sourceScale: Double = 1) throws -> CIImage {
+        let image = try renderColors(geometry(input, a.geometry), adjustments: a, referenceSize: referenceSize, sourceScale: sourceScale)
+        return try metadataStamp.apply(to: image, metadata: metadata, settings: a.metadataOverlay, referenceSize: referenceSize)
     }
 
     private func renderColors(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil, sourceScale: Double = 1) throws -> CIImage {
@@ -263,13 +268,13 @@ final class Renderer {
         let baseline = prepared.baseline
         let sourceScale = baseline.extent.width/source.extent.width
         let edited = try renderColors(baseline, adjustments: adjustments, sourceScale: sourceScale)
-        let final = try cgImage(edited)
+        let final = try cgImage(metadataStamp.apply(to: edited, metadata: metadata, settings: adjustments.metadataOverlay))
         let samplingInput = try beforeSelective(baseline, adjustments, sourceScale: sourceScale)
         let sampling = try cgImage(samplingInput)
         let mask = adjustments.selective.enabled ? try cgImage(selective(samplingInput, adjustments.selective, mask: true)) : nil
         let detail = try detailViewport.map { try renderDetail(source, viewport: $0, adjustments: adjustments, maximumEdge: longEdge <= 1000 ? 1000 : 4096) }
         if detailViewport == nil { preparedDetail = nil }
-        return PreviewResult(original: prepared.original, edited: final, samplingImage: sampling, mask: mask, clipping: try clipping(final), originalClipping: prepared.clipping, histogram: histogram(CIImage(cgImage: final)), originalHistogram: prepared.histogram, sourceSize: source.extent.size, detail: detail)
+        return PreviewResult(original: prepared.original, edited: final, samplingImage: sampling, mask: mask, clipping: try clipping(final), originalClipping: prepared.clipping, histogram: histogram(CIImage(cgImage: final)), originalHistogram: prepared.histogram, sourceSize: source.extent.size, detail: detail, metadata: metadata)
     }
 
     private func renderDetail(_ source: CIImage, viewport: DetailViewport, adjustments: Adjustments, maximumEdge: Double) throws -> DetailResult {
@@ -299,7 +304,8 @@ final class Renderer {
             preparedDetail = prepared // Only the current visible crop is retained.
         }
         let referenceSize = CGSize(width: size.width*scale, height: size.height*scale)
-        let edited = try cgImage(renderColors(prepared.baseline, adjustments: adjustments, referenceSize: referenceSize, sourceScale: scale).cropped(to: visibleBounds))
+        let colors = try renderColors(prepared.baseline, adjustments: adjustments, referenceSize: referenceSize, sourceScale: scale)
+        let edited = try cgImage(metadataStamp.apply(to: colors, metadata: metadata, settings: adjustments.metadataOverlay, referenceSize: referenceSize).cropped(to: visibleBounds))
         let samplingInput = try beforeSelective(prepared.baseline, adjustments, referenceSize: referenceSize, sourceScale: scale)
         let sampling = try cgImage(samplingInput.cropped(to: visibleBounds))
         let mask = adjustments.selective.enabled ? try cgImage(selective(samplingInput, adjustments.selective, mask: true).cropped(to: visibleBounds)) : nil
