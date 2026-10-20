@@ -1,53 +1,130 @@
-# PicTuner
+<p align="center">
+  <img src="Resources/AppIcon.png" width="112" alt="PicTuner app icon">
+</p>
 
-A native macOS photo editor for quickly browsing folders, making persistent non-destructive edits, and exporting finished copies.
+<h1 align="center">PicTuner</h1>
 
-The first development version is implemented in Swift, SwiftUI, AppKit, and Core Image. It requires macOS 26.6.2 or later and an installed Xcode Swift toolchain to build. It has no third-party application dependencies.
+<p align="center">A native macOS photo editor for quick, non-destructive edits across whole folders.</p>
+
+Browse your photos, tune their look, and export the keepers. PicTuner works directly with existing folders, remembers each photo’s edits, and leaves the originals untouched.
+
+![PicTuner editor with a mountain photograph, workspace folders, filmstrip, histogram, and adjustment panels](docs/screenshots/editor.jpg)
+
+## Features
+
+- **Folder workspaces.** Add a folder and browse its images and nested folders, with a filmstrip, arrow-key navigation, favorites, and rejection flags. Hide the workspace sidebar when you want more room.
+- **Live adjustments.** Change exposure, contrast, highlights, shadows, white balance, hue, saturation, and vibrance while the preview updates as you drag. The two-column inspector keeps all adjustments visible without scrolling.
+- **Detail and effects.** Tune clarity, texture, sharpening, noise reduction, black & white, sepia, vignette, glow, film grain, and shadow/highlight color grading. Each slider has its own reset.
+- **Selective color.** Pick a color from the photo, accentuate similar tones, and desaturate the rest. Adjust the matching range and softness, or inspect the selection mask.
+- **Framing and detail.** Crop with aspect-ratio presets, rotate in 90° steps, mirror horizontally or vertically, and toggle a 3×3 composition grid. Zoom to actual source pixels or beyond and pan to inspect details.
+- **Original comparison and histogram.** Hold Space or the Original button to compare, with your current framing and zoom retained. View RGB/luminance histograms and clipping indicators.
+- **Reusable edits.** Save color presets, copy and paste adjustments, or apply them to multiple selected photos. Each photo keeps its own crop and orientation.
+- **Deliberate export.** Mark photos with **Include in Export**, then export just those photos as JPEG or PNG, with optional resizing and subfolder preservation.
+- **RAW support.** Develop camera RAW files using macOS’s RAW decoder, alongside JPEG and PNG. Supported cameras and formats depend on the host macOS version.
+
+Everything runs locally. No accounts, cloud uploads, analytics, or third-party application dependencies.
+
+### Selective color
+
+Keep a chosen color prominent while reducing saturation elsewhere. Color matching applies across the image; it is not an object or brush mask.
+
+![PicTuner selective-color controls retaining a green car against desaturated surroundings](docs/screenshots/selective-color.jpg)
+
+### Crop and composition
+
+Adjust framing with a contextual crop toolbar and a rule-of-thirds overlay. Apply the crop or cancel it before returning to editing.
+
+![PicTuner crop mode with aspect-ratio controls and a rule-of-thirds overlay](docs/screenshots/crop.jpg)
 
 ## Build and run
+
+Requires **macOS 26.6.2 or later** and an installed Xcode Swift toolchain. The package uses Swift tools version 6.0. The editor needs at least **1340 × 900 points** of content space and opens to the available screen area.
+
+From the repository root:
 
 ```sh
 ./scripts/build-app.sh
 open build/PicTuner.app
 ```
 
-For an optimized build, run `./scripts/build-app.sh release`. The script creates an ad-hoc signed local app; distribution signing and notarization are not configured. You can also open `Package.swift` in Xcode to work on the source.
+For an optimized build:
 
-The bundled app icon uses a violet aperture on an off-white tile, using Goldmark Solutions’ palette from [goldmark.solutions](https://goldmark.solutions/css/index.css). The artwork is in `Resources/AppIcon.png`. Its native macOS icon sizes are checked in as `Resources/AppIcon.icns`; run `./scripts/build-icon.sh` to regenerate that file after changing the artwork. The original generation prompt is in `Resources/AppIcon.prompt.txt`.
+```sh
+./scripts/build-app.sh release
+```
 
-Choose **Add Workspace…** and select a folder. Click the preview or a thumbnail to browse with the left/right arrows. Hold **Space** or the **Original** button to compare. Use the **Include in Export** checkmark above the filmstrip (⇧⌘G) on photos you want to export; a green checkmark identifies them in the filmstrip. You can also mark/unmark selected photos together in the **Photo actions** (•••) menu above the filmstrip. Edits and export flags autosave to `.pictuner/workspace.json` under the selected folder. Export includes only marked photos and writes copies to a folder outside registered workspaces.
+The script builds and bundles `build/PicTuner.app` with a local ad-hoc signature. Distribution signing and notarization are not configured. To work on the source in Xcode, open `Package.swift`.
 
-Adjustments preview continuously as sliders move. A smaller preview keeps dragging responsive, then refines on release; each drag is one undo step. The small **Reset** beside a slider or setting selector restores its default value. Image-adjustment resets are undoable and leave other edits intact.
+## Everyday workflow
 
-Use the magnifier buttons or percentage menu to zoom into source-image detail. **⌘1** shows actual pixels; **⌘0** fits the photo. You can also pinch, use a mouse wheel (or Option-scroll), and drag/two-finger scroll to pan. Double-click toggles Fit/100% around the clicked point. Zoom is preserved while comparing the original and while editing.
+1. Choose **Add Workspace…** and select a folder. Photos stay in place; subfolders appear in the sidebar.
+2. Select a photo in the filmstrip. Click the preview to focus it, then use **← / →** to browse.
+3. Adjust the image, crop or rotate as needed, and hold **Space** to check the original. Changes autosave as you work and survive image changes and app restarts.
+4. Click the checkmark beside the photo controls, or press **⇧⌘G**, to mark a photo for export. Marked thumbnails display a green checkmark.
+5. Choose **Export**, select JPEG or PNG and an output folder outside your registered workspaces, then export the marked photos.
 
-PicTuner opens to the full available screen width and height on every launch. You can resize it afterward.
+Favorites and thumbnail selection do not mark a photo for export. Rejected photos are excluded. Export starts with all marked, non-rejected photos in the workspace; you can narrow the scope to a folder, selection, or favorites.
 
-Toggle **Workspaces** with the sidebar button in the window toolbar or **⌃⌘S** (View → Hide/Show Workspaces) to give the photo more room. The app remembers your preference.
+Command-click thumbnails to select several photos. The **Photo actions** menu (•••) contains copy/paste, batch adjustment, and batch export-marking actions when applicable.
 
-Right-click a workspace folder and choose **Reset Workspace…** to clear all photo edits and favorite/reject/export flags throughout that workspace. A confirmation appears first. Source files and saved presets are kept; the reset cannot be undone.
+## Keyboard shortcuts
 
-The wider right inspector shows four bordered panels in two columns: **Light** and **Effects** on the left; **Color** and **Selective Color** on the right. Light includes Clarity, Texture, Sharpening, and Noise Reduction. Color includes Vibrance and shadow/highlight Color Grading. Effects contains Black & White and Sepia sliders, Vignette, Glow, and Film Grain. All sliders stay visible without tabs or scrolling, including selective-color controls when the effect is off. The histogram is three times taller in a full-height window and twice as tall in smaller windows, with presets and **Reset All Edits** at the bottom. The minimum window content size is 1340 × 900.
+| Action | Shortcut |
+| --- | --- |
+| Add workspace | ⌘O |
+| Previous / next photo | ← / → with preview focused |
+| Compare with original | Hold Space |
+| Undo / redo edit | ⌘Z / ⇧⌘Z |
+| Fit photo / actual pixels | ⌘0 / ⌘1 |
+| Zoom in / out | ⌘+ / ⌘− |
+| Show / hide Workspaces | ⌃⌘S |
+| Crop | ⌘K |
+| Apply / cancel crop | Return / Esc |
+| Toggle Include in Export | ⇧⌘G |
+| Copy / paste adjustments | ⇧⌘C / ⇧⌘V |
+| Select all photos | ⇧⌘A |
+| Export | ⇧⌘E |
 
-The grid button above the filmstrip shows or hides a **3×3 composition grid** over the photo. Visibility is remembered; the grid is excluded from exported images.
+You can also pinch or use the mouse wheel to zoom, drag or two-finger scroll to pan, and double-click to switch between Fit and 100% around the clicked point. At 100%, one source pixel maps to one display pixel, accounting for Retina scaling.
 
-Use the bar above the filmstrip for 90° rotation, horizontal/vertical flip, crop (**⌘K**), Favorite, Reject, and export marking. **Photo actions** (•••) contains copy/paste and multi-selection actions. Drag the crop corners or move the rectangle, choose an aspect ratio, then **Apply** (Return) or **Cancel** (Esc). These edits are saved per photo and applied to exports. Comparison keeps the current framing; color presets and copied edits preserve each photo's framing.
+## Edits, originals, and exports
 
-## Verification
+PicTuner stores per-photo adjustments, framing, and flags in **`.pictuner/workspace.json`** inside the workspace root. Keep that hidden folder with your photos to retain their edits. Workspace registrations and custom presets are stored separately in **`~/Library/Application Support/Pictuner/`**; that established storage name is intentional.
+
+- Editing and export never rewrite, rename, or delete source photos.
+- Preview, histogram, and export use the same ordered adjustment pipeline. For RAW comparison, “original” means the default RAW development, with the current crop and orientation retained.
+- Exports are separate sRGB JPEG/PNG copies. Source EXIF and GPS metadata are not copied to the output.
+- Export destinations must be outside every registered workspace. Existing output names can be renamed or skipped, never replaced; aliases and symbolic links are checked to protect sources.
+- **Reset Workspace…** in a workspace’s context menu clears edits and favorite/reject/export flags throughout that workspace after confirmation. It keeps source files and saved presets. This reset cannot be undone.
+
+## Development
+
+PicTuner is implemented in **Swift, SwiftUI, AppKit, and Core Image** as a Swift Package executable.
+
+Run the regression suite:
 
 ```sh
 ./scripts/test.sh
 ```
 
-Rendering tests need access to macOS graphics services; a restricted/headless execution environment can return empty Core Image buffers. The optional real-camera integration test runs when `PICTUNER_RAW_FIXTURE` points to a supported RAW file:
+Include integration coverage with a real, supported camera RAW file:
 
 ```sh
 PICTUNER_RAW_FIXTURE="/absolute/path/to/photo.NEF" ./scripts/test.sh
 ```
 
-- [Product specification](docs/SPEC.md): behavior, scope, and acceptance criteria.
-- [Technical design](docs/ARCHITECTURE.md): proposed architecture, persistence, and rendering rules.
-- [Development status](docs/DEVELOPMENT.md): implemented behavior, verification, and current limitations.
-- [Agent instructions](AGENTS.md): rules for future implementation work.
+Rendering tests require access to macOS graphics services; restricted or headless environments can return empty Core Image buffers. See the development notes for the current verification results and known limitations.
 
-Start with the specification. Technical choices marked provisional may be revised with evidence; confirmed product behavior should remain intact unless the user requests a change.
+| Reference | Contents |
+| --- | --- |
+| [Product specification](docs/SPEC.md) | Scope, behavior, and acceptance criteria |
+| [Architecture](docs/ARCHITECTURE.md) | Rendering, persistence, concurrency, and export design |
+| [Development notes](docs/DEVELOPMENT.md) | Implementation status, validation, and remaining work |
+| [Agent instructions](AGENTS.md) | Rules for implementation work |
+| [Screenshot notes](docs/screenshots/README.md) | Photo credits and capture details |
+
+The app icon artwork lives in `Resources/AppIcon.png`. Run `./scripts/build-icon.sh` to regenerate its macOS icon sizes after changing it.
+
+## License
+
+PicTuner is available under the [MIT License](LICENSE). Photos shown in the screenshots retain their [credited licenses](docs/screenshots/README.md#photo-credits).
