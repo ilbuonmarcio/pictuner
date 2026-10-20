@@ -112,6 +112,7 @@ final class ZoomTests: XCTestCase {
         let canvas = PhotoCanvas(frame: CGRect(x: 0, y: 0, width: 120, height: 80))
         XCTAssertTrue(canvas.clipsToBounds)
         canvas.image = solid; canvas.sourceSize = CGSize(width: 4000, height: 3000)
+        canvas.showGrid = true
         // A larger backing surface represents the toolbar, sidebar, inspector, and filmstrip.
         // Deliberately provide no implicit AppKit clip: the canvas must bound its own drawing.
         let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 160,

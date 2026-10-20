@@ -5,18 +5,20 @@ import CoreImage
 @testable import Pictuner
 
 final class InspectorLayoutTests: XCTestCase {
-    @MainActor func testEveryInspectorSectionFitsMinimumWindowWithoutScrolling() {
+    @MainActor func testAllAdjustmentsFitTogetherWithoutScrollingWithSelectiveOnOrOff() {
         let model = AppModel(restoringSession: false)
-        // Include the expanded selective-color controls and populated presets menu.
-        model.settings.adjustments.selective.enabled = true
         model.presets = [UserPreset(name: "A custom preset with a long name", adjustments: Adjustments())]
-        for section in InspectorSection.allCases {
-            let view = NSHostingView(rootView: InspectorView(section: section).environmentObject(model).frame(width: 290))
-            view.layoutSubtreeIfNeeded()
-            let size = view.fittingSize
-            XCTAssertGreaterThan(size.height, 200)
-            XCTAssertLessThanOrEqual(size.height, 680, "\(section.rawValue) requires \(size.height) points; all controls must fit the minimum window height")
-            XCTAssertEqual(size.width, 290, accuracy: 0.5)
+        for availableHeight: CGFloat in [InspectorView.minimumHeight, 1000] {
+            let histogramHeight = InspectorView.histogramHeight(for: availableHeight)
+            for enabled in [false, true] {
+                model.settings.adjustments.selective.enabled = enabled
+                let view = NSHostingView(rootView: InspectorView(histogramHeight: histogramHeight).environmentObject(model).frame(width: InspectorView.width))
+                view.layoutSubtreeIfNeeded()
+                let size = view.fittingSize
+                XCTAssertGreaterThan(size.height, 200)
+                XCTAssertLessThanOrEqual(size.height, availableHeight, "All controls with a \(histogramHeight)-point histogram require \(size.height) points; they must fit without scrolling")
+                XCTAssertEqual(size.width, InspectorView.width, accuracy: 0.5)
+            }
         }
     }
 

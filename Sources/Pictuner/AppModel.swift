@@ -137,6 +137,36 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Invoked only after the workspace menu's explicit confirmation.
+    func resetWorkspace(_ reference: WorkspaceReference) {
+        guard !isLoading, !exporting, workspaces.contains(reference) || activeWorkspace == reference else { return }
+        guard (try? reference.url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+            errorMessage = "The workspace folder is unavailable."
+            return
+        }
+        let isActive = activeWorkspace == reference
+        let targetStore: WorkspaceStore
+        if isActive {
+            guard flush(), let store else { return }
+            targetStore = store
+        } else {
+            targetStore = WorkspaceStore(root: reference.url)
+        }
+        guard targetStore.resetImages() else {
+            let failure = targetStore.failure ?? "Could not reset the workspace."
+            errorMessage = failure
+            if isActive { saveStatus = failure }
+            return
+        }
+        guard isActive else { return }
+        editedSinceSave = false; sessionTouched = false; saveStatus = "All edits saved"
+        settings = selectedID.map { targetStore.settings(for: $0) } ?? ImageSettings()
+        undoStack = []; redoStack = []; gestureStart = nil; updateUndoState()
+        cropDraft = nil
+        resetGeometryPreview()
+        requestPreview()
+    }
+
     func open(_ reference: WorkspaceReference) {
         guard flush() else { return }
         activeWorkspace = reference; folder = ""; photos = []; selectedID = nil; selectedIDs = []; preview = nil

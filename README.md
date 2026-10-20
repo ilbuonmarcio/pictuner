@@ -17,11 +17,19 @@ The bundled app icon uses a violet aperture on an off-white tile, using Goldmark
 
 Choose **Add Workspace…** and select a folder. Click the preview or a thumbnail to browse with the left/right arrows. Hold **Space** or the **Original** button to compare. Use the **Include in Export** checkmark above the filmstrip (⇧⌘G) on photos you want to export; a green checkmark identifies them in the filmstrip. You can also mark/unmark selected photos together in the **Photo actions** (•••) menu above the filmstrip. Edits and export flags autosave to `.pictuner/workspace.json` under the selected folder. Export includes only marked photos and writes copies to a folder outside registered workspaces.
 
-Adjustments preview continuously as sliders move. A smaller preview keeps dragging responsive, then refines on release; each drag is one undo step.
+Adjustments preview continuously as sliders move. A smaller preview keeps dragging responsive, then refines on release; each drag is one undo step. The small **Reset** beside a slider or setting selector restores its default value. Image-adjustment resets are undoable and leave other edits intact.
 
 Use the magnifier buttons or percentage menu to zoom into source-image detail. **⌘1** shows actual pixels; **⌘0** fits the photo. You can also pinch, use a mouse wheel (or Option-scroll), and drag/two-finger scroll to pan. Double-click toggles Fit/100% around the clicked point. Zoom is preserved while comparing the original and while editing.
 
-The right inspector keeps the histogram visible and uses **Light**, **Color**, **Selective**, and **Effects** tabs, with no vertical scrolling. Effects contains looks, vignette, and presets; **Reset All Edits** stays at the bottom.
+PicTuner opens to the full available screen width and height on every launch. You can resize it afterward.
+
+Toggle **Workspaces** with the sidebar button in the window toolbar or **⌃⌘S** (View → Hide/Show Workspaces) to give the photo more room. The app remembers your preference.
+
+Right-click a workspace folder and choose **Reset Workspace…** to clear all photo edits and favorite/reject/export flags throughout that workspace. A confirmation appears first. Source files and saved presets are kept; the reset cannot be undone.
+
+The wider right inspector shows four bordered panels in two columns: **Light** and **Effects** on the left; **Color** and **Selective Color** on the right. Light includes Clarity, Texture, Sharpening, and Noise Reduction. Color includes Vibrance and shadow/highlight Color Grading. Effects contains Black & White and Sepia sliders, Vignette, Glow, and Film Grain. All sliders stay visible without tabs or scrolling, including selective-color controls when the effect is off. The histogram is three times taller in a full-height window and twice as tall in smaller windows, with presets and **Reset All Edits** at the bottom. The minimum window content size is 1340 × 900.
+
+The grid button above the filmstrip shows or hides a **3×3 composition grid** over the photo. Visibility is remembered; the grid is excluded from exported images.
 
 Use the bar above the filmstrip for 90° rotation, horizontal/vertical flip, crop (**⌘K**), Favorite, Reject, and export marking. **Photo actions** (•••) contains copy/paste and multi-selection actions. Drag the crop corners or move the rectangle, choose an aspect ratio, then **Apply** (Return) or **Cancel** (Esc). These edits are saved per photo and applied to exports. Comparison keeps the current framing; color presets and copied edits preserve each photo's framing.
 

@@ -38,6 +38,7 @@ struct DetailResult {
 final class Renderer {
     let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     lazy var context = CIContext(options: [.workingColorSpace: colorSpace, .outputColorSpace: colorSpace, .cacheIntermediates: false])
+    private let effects = PhotoEffects()
     private var cachedURL: URL?
     private var cachedDate: Date?
     private var cachedImage: CIImage?
@@ -50,6 +51,7 @@ final class Renderer {
     private var preparedPreviews: [Double: PreparedPreview] = [:]
     private struct PreparedDetail {
         let region: CGRect
+        let paddedRegion: CGRect
         let scale: Double
         let baseline: CIImage
         let original: CGImage
@@ -124,8 +126,11 @@ final class Renderer {
         return normalized
     }
 
-    func beforeSelective(_ input: CIImage, _ a: Adjustments) -> CIImage {
+    func beforeSelective(_ input: CIImage, _ a: Adjustments, referenceSize: CGSize? = nil, sourceScale: Double = 1) throws -> CIImage {
         var image = input
+        if a.noiseReduction > 0 {
+            image = image.clampedToExtent().applyingFilter("CINoiseReduction", parameters: ["inputNoiseLevel": a.noiseReduction*0.1, "inputSharpness": 0]).cropped(to: input.extent)
+        }
         if a.temperature != 0 || a.tint != 0 {
             image = image.applyingFilter("CITemperatureAndTint", parameters: ["inputNeutral": CIVector(x: 6500 + a.temperature, y: a.tint), "inputTargetNeutral": CIVector(x: 6500, y: 0)])
         }
@@ -138,6 +143,11 @@ final class Renderer {
         }
         if a.hue != 0 { image = image.applyingFilter("CIHueAdjust", parameters: [kCIInputAngleKey: a.hue * .pi / 180]) }
         if a.saturation != 1 { image = image.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: a.saturation]) }
+        if a.vibrance != 0 { image = image.applyingFilter("CIVibrance", parameters: ["inputAmount": a.vibrance]) }
+        let size = referenceSize ?? input.extent.size
+        let short = min(size.width, size.height)
+        image = try effects.localContrast(image, amount: a.clarity, radius: short*0.012, midtones: true)
+        image = try effects.localContrast(image, amount: a.texture, radius: short*0.0015, midtones: false)
         return image
     }
 
@@ -164,15 +174,23 @@ final class Renderer {
         return image.cropped(to: rect).transformed(by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY))
     }
 
-    func render(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil) throws -> CIImage {
-        try renderColors(geometry(input, a.geometry), adjustments: a, referenceSize: referenceSize)
+    func render(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil, sourceScale: Double = 1) throws -> CIImage {
+        try renderColors(geometry(input, a.geometry), adjustments: a, referenceSize: referenceSize, sourceScale: sourceScale)
     }
 
-    private func renderColors(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil) throws -> CIImage {
-        var image = beforeSelective(input, a)
+    private func renderColors(_ input: CIImage, adjustments a: Adjustments, referenceSize: CGSize? = nil, sourceScale: Double = 1) throws -> CIImage {
+        var image = try beforeSelective(input, a, referenceSize: referenceSize, sourceScale: sourceScale)
         if a.selective.enabled { image = try selective(image, a.selective) }
         if a.monochrome > 0 { image = image.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 1-a.monochrome]) }
         if a.sepia > 0 { image = image.applyingFilter("CISepiaTone", parameters: [kCIInputIntensityKey: a.sepia]) }
+        image = try effects.grade(image, a)
+        if a.sharpening > 0 {
+            image = image.clampedToExtent().applyingFilter("CIUnsharpMask", parameters: [kCIInputIntensityKey: a.sharpening, kCIInputRadiusKey: max(0.1, a.sharpeningRadius*sourceScale)]).cropped(to: input.extent)
+        }
+        if a.glow > 0 {
+            let size = referenceSize ?? input.extent.size
+            image = image.clampedToExtent().applyingFilter("CIBloom", parameters: [kCIInputIntensityKey: a.glow, kCIInputRadiusKey: max(0.1, min(size.width,size.height)*a.glowRadius)]).cropped(to: input.extent)
+        }
         if a.vignette > 0 {
             let size = referenceSize ?? input.extent.size
             guard let filtered = vignetteKernel?.apply(extent: image.extent, arguments: [image, CIVector(x: size.width, y: size.height), a.vignette, a.vignetteRadius, a.vignetteSoftness]) else {
@@ -180,6 +198,7 @@ final class Renderer {
             }
             image = filtered
         }
+        image = try effects.grain(image, a, sourceScale: sourceScale)
         return image.cropped(to: input.extent)
     }
 
@@ -231,10 +250,12 @@ final class Renderer {
             preparedPreviews[longEdge] = prepared
         }
         let baseline = prepared.baseline
-        let edited = try renderColors(baseline, adjustments: adjustments)
+        let sourceScale = baseline.extent.width/source.extent.width
+        let edited = try renderColors(baseline, adjustments: adjustments, sourceScale: sourceScale)
         let final = try cgImage(edited)
-        let sampling = try cgImage(beforeSelective(baseline, adjustments))
-        let mask = adjustments.selective.enabled ? try cgImage(selective(beforeSelective(baseline, adjustments), adjustments.selective, mask: true)) : nil
+        let samplingInput = try beforeSelective(baseline, adjustments, sourceScale: sourceScale)
+        let sampling = try cgImage(samplingInput)
+        let mask = adjustments.selective.enabled ? try cgImage(selective(samplingInput, adjustments.selective, mask: true)) : nil
         let detail = try detailViewport.map { try renderDetail(source, viewport: $0, adjustments: adjustments, maximumEdge: longEdge <= 1000 ? 1000 : 4096) }
         if detailViewport == nil { preparedDetail = nil }
         return PreviewResult(original: prepared.original, edited: final, samplingImage: sampling, mask: mask, clipping: try clipping(final), originalClipping: prepared.clipping, histogram: histogram(CIImage(cgImage: final)), originalHistogram: prepared.histogram, sourceSize: source.extent.size, detail: detail)
@@ -245,11 +266,15 @@ final class Renderer {
         let r = viewport.region
         let region = CGRect(x: r.minX*size.width, y: r.minY*size.height, width: r.width*size.width, height: r.height*size.height).integral.intersection(source.extent)
         guard !region.isEmpty, !region.isNull else { throw PictunerError.message("The zoom region is outside the image.") }
-        let scale = min(1, max(0.001, viewport.scale), maximumEdge/max(region.width, region.height))
+        let minimumScale = min(1, max(0.001, viewport.scale), maximumEdge/max(size.width, size.height))
+        let padding = PhotoEffects.padding(adjustments, sourceSize: size, minimumScale: minimumScale)
+        let paddedRegion = region.insetBy(dx: -padding, dy: -padding).intersection(source.extent).integral
+        let scale = min(1, max(0.001, viewport.scale), maximumEdge/max(paddedRegion.width, paddedRegion.height))
+        let visibleBounds = region.applying(CGAffineTransform(scaleX: scale, y: scale)).integral
         let prepared: PreparedDetail
-        if let cached = preparedDetail, cached.region == region, cached.scale == scale { prepared = cached }
+        if let cached = preparedDetail, cached.region == region, cached.paddedRegion == paddedRegion, cached.scale == scale { prepared = cached }
         else {
-            let scaled = source.cropped(to: region).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            let scaled = source.cropped(to: paddedRegion).transformed(by: CGAffineTransform(scaleX: scale, y: scale))
             let bounds = scaled.extent.integral
             let width = Int(bounds.width), height = Int(bounds.height)
             let extendedSRGB = CGColorSpace(name: CGColorSpace.extendedSRGB)!
@@ -258,14 +283,16 @@ final class Renderer {
                 context.render(scaled.clampedToExtent(), toBitmap: bytes.baseAddress!, rowBytes: width*8, bounds: bounds, format: .RGBAh, colorSpace: extendedSRGB)
             }
             let baseline = CIImage(bitmapData: pixels, bytesPerRow: width*8, size: bounds.size, format: .RGBAh, colorSpace: extendedSRGB).transformed(by: CGAffineTransform(translationX: bounds.minX, y: bounds.minY))
-            let original = try cgImage(baseline)
-            prepared = PreparedDetail(region: region, scale: scale, baseline: baseline, original: original, clipping: try clipping(original))
+            let original = try cgImage(baseline.cropped(to: visibleBounds))
+            prepared = PreparedDetail(region: region, paddedRegion: paddedRegion, scale: scale, baseline: baseline, original: original, clipping: try clipping(original))
             preparedDetail = prepared // Only the current visible crop is retained.
         }
-        let edited = try cgImage(renderColors(prepared.baseline, adjustments: adjustments, referenceSize: CGSize(width: size.width*scale, height: size.height*scale)))
-        let sampling = try cgImage(beforeSelective(prepared.baseline, adjustments))
-        let mask = adjustments.selective.enabled ? try cgImage(selective(beforeSelective(prepared.baseline, adjustments), adjustments.selective, mask: true)) : nil
-        let bounds = prepared.baseline.extent
+        let referenceSize = CGSize(width: size.width*scale, height: size.height*scale)
+        let edited = try cgImage(renderColors(prepared.baseline, adjustments: adjustments, referenceSize: referenceSize, sourceScale: scale).cropped(to: visibleBounds))
+        let samplingInput = try beforeSelective(prepared.baseline, adjustments, referenceSize: referenceSize, sourceScale: scale)
+        let sampling = try cgImage(samplingInput.cropped(to: visibleBounds))
+        let mask = adjustments.selective.enabled ? try cgImage(selective(samplingInput, adjustments.selective, mask: true).cropped(to: visibleBounds)) : nil
+        let bounds = visibleBounds
         let normalized = CGRect(x: bounds.minX/scale/size.width, y: bounds.minY/scale/size.height, width: bounds.width/scale/size.width, height: bounds.height/scale/size.height)
         return DetailResult(region: normalized, original: prepared.original, edited: edited, samplingImage: sampling, mask: mask, clipping: try clipping(edited), originalClipping: prepared.clipping)
     }

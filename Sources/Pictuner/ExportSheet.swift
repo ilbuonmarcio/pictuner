@@ -10,19 +10,39 @@ struct ExportSheet: View {
                 Text("\(model.exportItems().count) \(model.exportItems().count == 1 ? "photo" : "photos")").foregroundStyle(.secondary)
             }
             Form {
-                Picker("Photos", selection: $model.exportOptions.scope) { ForEach(ExportScope.allCases, id: \.self) { Text($0.rawValue) } }
-                Picker("Format", selection: $model.exportOptions.format) { ForEach(OutputFormat.allCases, id: \.self) { Text($0.rawValue) } }
+                HStack {
+                    Picker("Photos", selection: $model.exportOptions.scope) { ForEach(ExportScope.allCases, id: \.self) { Text($0.rawValue) } }
+                    reset("Export scope", \.scope)
+                }
+                HStack {
+                    Picker("Format", selection: $model.exportOptions.format) { ForEach(OutputFormat.allCases, id: \.self) { Text($0.rawValue) } }
+                    reset("Export format", \.format)
+                }
                 if model.exportOptions.format == .jpeg {
-                    HStack { Text("Quality"); Slider(value: $model.exportOptions.quality, in: 0.3...1); Text("\(Int(model.exportOptions.quality*100))%").monospacedDigit().frame(width: 42) }
+                    HStack {
+                        Text("Quality")
+                        Slider(value: $model.exportOptions.quality, in: 0.3...1).accessibilityLabel("Export quality")
+                        Text("\(Int(model.exportOptions.quality*100))%").monospacedDigit().frame(width: 42)
+                        reset("Export quality", \.quality)
+                    }
                 }
-                Picker("Size", selection: $model.exportOptions.longEdge) {
-                    Text("Full resolution").tag(0.0)
-                    Text("Long edge · 3840 px").tag(3840.0)
-                    Text("Long edge · 2048 px").tag(2048.0)
-                    Text("Long edge · 1280 px").tag(1280.0)
+                HStack {
+                    Picker("Size", selection: $model.exportOptions.longEdge) {
+                        Text("Full resolution").tag(0.0)
+                        Text("Long edge · 3840 px").tag(3840.0)
+                        Text("Long edge · 2048 px").tag(2048.0)
+                        Text("Long edge · 1280 px").tag(1280.0)
+                    }
+                    reset("Export size", \.longEdge)
                 }
-                Toggle("Preserve subfolder structure", isOn: $model.exportOptions.preserveFolders)
-                Picker("Existing filenames", selection: $model.exportOptions.collision) { ForEach(CollisionPolicy.allCases, id: \.self) { Text($0.rawValue) } }
+                HStack {
+                    Toggle("Preserve subfolder structure", isOn: $model.exportOptions.preserveFolders)
+                    reset("Subfolder structure", \.preserveFolders)
+                }
+                HStack {
+                    Picker("Existing filenames", selection: $model.exportOptions.collision) { ForEach(CollisionPolicy.allCases, id: \.self) { Text($0.rawValue) } }
+                    reset("Filename collisions", \.collision)
+                }
             }.formStyle(.grouped).frame(height: 275)
             Text("sRGB · Metadata excluded").font(.system(size: 11)).foregroundStyle(.secondary)
                 .help("Source EXIF and GPS metadata are not included.")
@@ -35,5 +55,9 @@ struct ExportSheet: View {
                 Button("Export…", action: model.startExport).buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction).disabled(model.exportItems().isEmpty)
             }
         }.padding(26).frame(width: 470)
+    }
+
+    private func reset<Value: Equatable>(_ title: String, _ key: WritableKeyPath<ExportOptions, Value>) -> some View {
+        ResetValueButton(title: title, value: Binding(get: { model.exportOptions[keyPath: key] }, set: { model.exportOptions[keyPath: key] = $0 }), defaultValue: ExportOptions()[keyPath: key])
     }
 }

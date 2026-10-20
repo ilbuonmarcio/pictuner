@@ -92,7 +92,7 @@ final class GeometryTests: XCTestCase {
         let url = directory.appendingPathComponent("workspace.json")
         let bytes = try JSONSerialization.data(withJSONObject: metadata); try bytes.write(to: url)
         let store = WorkspaceStore(root: root)
-        XCTAssertNil(store.failure); XCTAssertEqual(store.document.schemaVersion, 3)
+        XCTAssertNil(store.failure); XCTAssertEqual(store.document.schemaVersion, 4)
         XCTAssertEqual(store.settings(for: "missing.nef").adjustments, a)
         XCTAssertTrue(store.settings(for: "missing.nef").exportReady)
         XCTAssertEqual(try Data(contentsOf: url), bytes)

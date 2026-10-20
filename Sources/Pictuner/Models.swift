@@ -26,6 +26,21 @@ struct Adjustments: Codable, Equatable, Sendable {
     var tint = 0.0
     var saturation = 1.0
     var hue = 0.0
+    var vibrance = 0.0
+    var clarity = 0.0
+    var texture = 0.0
+    var sharpening = 0.0
+    var sharpeningRadius = 1.2
+    var noiseReduction = 0.0
+    var glow = 0.0
+    var glowRadius = 0.02
+    var shadowHue = 220.0
+    var shadowTint = 0.0
+    var highlightHue = 40.0
+    var highlightTint = 0.0
+    var gradingBalance = 0.0
+    var grain = 0.0
+    var grainSize = 2.0
     var monochrome = 0.0
     var sepia = 0.0
     var vignette = 0.0
@@ -38,6 +53,8 @@ struct Adjustments: Codable, Equatable, Sendable {
     init() {}
     private enum CodingKeys: String, CodingKey {
         case exposure, brightness, contrast, highlights, shadows, temperature, tint, saturation, hue
+        case vibrance, clarity, texture, sharpening, sharpeningRadius, noiseReduction, glow, glowRadius
+        case shadowHue, shadowTint, highlightHue, highlightTint, gradingBalance, grain, grainSize
         case monochrome, sepia, vignette, vignetteRadius, vignetteSoftness, selective, geometry
     }
     init(from decoder: Decoder) throws {
@@ -58,6 +75,32 @@ struct Adjustments: Codable, Equatable, Sendable {
         vignetteSoftness = try values.decode(Double.self, forKey: .vignetteSoftness)
         selective = try values.decode(SelectiveColor.self, forKey: .selective)
         geometry = try values.decodeIfPresent(ImageGeometry.self, forKey: .geometry) ?? ImageGeometry()
+        vibrance = try values.decodeIfPresent(Double.self, forKey: .vibrance) ?? 0
+        clarity = try values.decodeIfPresent(Double.self, forKey: .clarity) ?? 0
+        texture = try values.decodeIfPresent(Double.self, forKey: .texture) ?? 0
+        sharpening = try values.decodeIfPresent(Double.self, forKey: .sharpening) ?? 0
+        sharpeningRadius = try values.decodeIfPresent(Double.self, forKey: .sharpeningRadius) ?? 1.2
+        noiseReduction = try values.decodeIfPresent(Double.self, forKey: .noiseReduction) ?? 0
+        glow = try values.decodeIfPresent(Double.self, forKey: .glow) ?? 0
+        glowRadius = try values.decodeIfPresent(Double.self, forKey: .glowRadius) ?? 0.02
+        shadowHue = try values.decodeIfPresent(Double.self, forKey: .shadowHue) ?? 220
+        shadowTint = try values.decodeIfPresent(Double.self, forKey: .shadowTint) ?? 0
+        highlightHue = try values.decodeIfPresent(Double.self, forKey: .highlightHue) ?? 40
+        highlightTint = try values.decodeIfPresent(Double.self, forKey: .highlightTint) ?? 0
+        gradingBalance = try values.decodeIfPresent(Double.self, forKey: .gradingBalance) ?? 0
+        grain = try values.decodeIfPresent(Double.self, forKey: .grain) ?? 0
+        grainSize = try values.decodeIfPresent(Double.self, forKey: .grainSize) ?? 2
+        let effectRanges: [(CodingKeys, Double, ClosedRange<Double>)] = [
+            (.vibrance, vibrance, -1...1), (.clarity, clarity, -1...1), (.texture, texture, -1...1),
+            (.sharpening, sharpening, 0...2), (.sharpeningRadius, sharpeningRadius, 0.3...5),
+            (.noiseReduction, noiseReduction, 0...1), (.glow, glow, 0...1), (.glowRadius, glowRadius, 0.002...0.06),
+            (.shadowHue, shadowHue, 0...360), (.shadowTint, shadowTint, 0...1),
+            (.highlightHue, highlightHue, 0...360), (.highlightTint, highlightTint, 0...1),
+            (.gradingBalance, gradingBalance, -1...1), (.grain, grain, 0...1), (.grainSize, grainSize, 0.5...8)
+        ]
+        for (key, value, range) in effectRanges where !value.isFinite || !range.contains(value) {
+            throw DecodingError.dataCorruptedError(forKey: key, in: values, debugDescription: "Invalid photo effect value.")
+        }
     }
 }
 
@@ -81,8 +124,8 @@ struct ImageSettings: Codable, Equatable, Sendable {
 }
 
 struct WorkspaceDocument: Codable, Sendable {
-    var schemaVersion = 3
-    var renderVersion = 1
+    var schemaVersion = 4
+    var renderVersion = 2
     var workspaceID = UUID()
     var images: [String: ImageSettings] = [:]
     var lastImage: String?

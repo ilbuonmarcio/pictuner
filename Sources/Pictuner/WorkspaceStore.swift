@@ -18,12 +18,13 @@ final class WorkspaceStore {
             if FileManager.default.fileExists(atPath: metadataURL.path) {
                 let data = try Data(contentsOf: metadataURL)
                 let header = try JSONDecoder().decode(VersionHeader.self, from: data)
-                guard (1...3).contains(header.schemaVersion), header.renderVersion == 1 else {
+                guard (1...4).contains(header.schemaVersion), (1...2).contains(header.renderVersion) else {
                     throw PictunerError.message("This workspace uses a newer or unsupported metadata version. Its metadata has been preserved.")
                 }
                 document = try JSONDecoder().decode(WorkspaceDocument.self, from: data)
-                // Migrate legacy export flags and geometry with neutral defaults.
-                document.schemaVersion = 3
+                // Migrate legacy export flags, geometry, and effects with neutral defaults.
+                document.schemaVersion = 4
+                document.renderVersion = 2
                 expectedData = data
             }
         } catch {
@@ -45,6 +46,16 @@ final class WorkspaceStore {
     func update(_ settings: ImageSettings, for path: String) { document.images[path] = settings }
     func setLastImage(_ path: String?) { document.lastImage = path }
     func settings(for path: String) -> ImageSettings { document.images[path] ?? ImageSettings() }
+
+    /// Reset known photos, including missing files, without losing their path associations.
+    /// Keep the previous in-memory state if the atomic save fails.
+    @discardableResult func resetImages() -> Bool {
+        guard failure == nil else { return false }
+        let previous = document
+        document.images = document.images.mapValues { _ in ImageSettings() }
+        guard save() else { document = previous; return false }
+        return true
+    }
 
     @discardableResult func save() -> Bool {
         guard writable else { return false }

@@ -6,15 +6,19 @@ private let accent = Color(red: 0.95, green: 0.69, blue: 0.36)
 
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage("workspaceSidebarVisible") private var workspaceSidebarVisible = true
+    @AppStorage("compositionGridVisible") private var compositionGridVisible = false
     var body: some View {
         HStack(spacing: 0) {
-            WorkspaceSidebar().frame(minWidth: 190, idealWidth: 215, maxWidth: 250)
-            Divider()
+            if workspaceSidebarVisible {
+                WorkspaceSidebar().frame(width: 215)
+                Divider()
+            }
             VStack(spacing: 0) {
                 previewToolbar
                 Divider()
                 ZStack {
-                    PreviewCanvas(image: displayImage, clipping: displayClipping, detailImage: displayDetail, detailClipping: detailClipping, detailRegion: model.preview?.detail?.region, sourceSize: model.preview?.sourceSize ?? .zero, identity: model.selectedID, viewport: model.viewport, picking: model.pickingColor, crop: model.preview == nil ? nil : model.cropDraft, cropRatio: model.cropRatio, cropChanged: model.updateCrop, cropFinished: { if $0 { model.applyCrop() } else { model.cancelCrop() } }, viewportChanged: { model.updateViewport($0, canvas: $1, backing: $2) }, geometryChanged: { model.updateCanvasGeometry($0, backing: $1) }, compare: { model.showingOriginal = $0 }, navigate: model.navigate, sample: model.sampleColor)
+                    PreviewCanvas(image: displayImage, clipping: displayClipping, detailImage: displayDetail, detailClipping: detailClipping, detailRegion: model.preview?.detail?.region, sourceSize: model.preview?.sourceSize ?? .zero, identity: model.selectedID, viewport: model.viewport, picking: model.pickingColor, showGrid: compositionGridVisible, crop: model.preview == nil ? nil : model.cropDraft, cropRatio: model.cropRatio, cropChanged: model.updateCrop, cropFinished: { if $0 { model.applyCrop() } else { model.cancelCrop() } }, viewportChanged: { model.updateViewport($0, canvas: $1, backing: $2) }, geometryChanged: { model.updateCanvasGeometry($0, backing: $1) }, compare: { model.showingOriginal = $0 }, navigate: model.navigate, sample: model.sampleColor)
                     if model.activePhoto == nil { emptyState }
                     else if let error = model.previewError {
                         ContentUnavailableView("Unable to open image", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -38,13 +42,22 @@ struct ContentView: View {
                 statusBar
             }.frame(minWidth: 400)
             Divider()
-            InspectorView().frame(width: 290)
+            GeometryReader { geometry in
+                InspectorView(histogramHeight: InspectorView.histogramHeight(for: geometry.size.height))
+            }.frame(width: InspectorView.width)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(accent)
         .preferredColorScheme(.dark)
-        .frame(minWidth: 1000, minHeight: 680)
+        .frame(minWidth: 1340, minHeight: InspectorView.minimumHeight)
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button { workspaceSidebarVisible.toggle() } label: {
+                    Label(workspaceSidebarVisible ? "Hide Workspaces" : "Show Workspaces", systemImage: "sidebar.left")
+                }.labelStyle(.iconOnly)
+                    .help(workspaceSidebarVisible ? "Hide Workspaces · ⌃⌘S" : "Show Workspaces · ⌃⌘S")
+                    .accessibilityValue(workspaceSidebarVisible ? "Visible" : "Hidden")
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button { model.showExportSheet = true } label: { Label("Export", systemImage: "square.and.arrow.up") }
                     .disabled(model.photos.isEmpty || model.exporting || model.isCropping)
@@ -104,6 +117,7 @@ struct ContentView: View {
                     }
                 } label: { Text(model.viewport.label).monospacedDigit() }.frame(width: 74)
                     .accessibilityLabel("Zoom")
+                ResetValueButton(title: "Zoom", value: Binding(get: { model.viewport.scale }, set: model.setZoom), defaultValue: nil)
                 Button { model.zoomBy(sqrt(2)) } label: { Image(systemName: "plus.magnifyingglass") }.help("Zoom in · ⌘+").accessibilityLabel("Zoom in")
             }.buttonStyle(.borderless).disabled(model.preview == nil || model.isCropping)
         }.padding(.horizontal, 16).frame(height: 58)
@@ -138,6 +152,7 @@ struct ContentView: View {
 
 private struct WorkspaceSidebar: View {
     @EnvironmentObject var model: AppModel
+    @State private var workspaceToReset: WorkspaceReference?
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack { Text("Workspaces").font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary); Spacer(); Button(action: model.addWorkspace) { Image(systemName: "plus") }.buttonStyle(.plain).help("Add Workspace") }.padding(18)
@@ -157,6 +172,9 @@ private struct WorkspaceSidebar: View {
                                     Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([workspace.url]) }
                                     Button("Remove Workspace") { model.removeWorkspace(workspace) }
                                     Button("Refresh") { model.open(workspace) }
+                                    Divider()
+                                    Button("Reset Workspace…", role: .destructive) { workspaceToReset = workspace }
+                                        .disabled(model.isLoading || model.exporting)
                                 }
                             if model.activeWorkspace == workspace {
                                 ForEach(model.folders.filter { !$0.contains("/") }, id: \.self) { FolderBranch(path: $0, depth: 0) }
@@ -167,6 +185,15 @@ private struct WorkspaceSidebar: View {
             }
             Spacer(minLength: 0)
         }.background(Color(nsColor: .underPageBackgroundColor).opacity(0.4))
+        .alert("Reset Workspace?", isPresented: Binding(get: { workspaceToReset != nil }, set: { if !$0 { workspaceToReset = nil } }), presenting: workspaceToReset) { workspace in
+            Button("Cancel", role: .cancel) { workspaceToReset = nil }
+            Button("Reset Workspace", role: .destructive) {
+                workspaceToReset = nil
+                model.resetWorkspace(workspace)
+            }
+        } message: { workspace in
+            Text("Reset all photo edits, crops, rotations, flips, favorites, rejections, and export marks in “\(workspace.name)” and its subfolders? Original files and saved presets will be kept. This cannot be undone.")
+        }
     }
 }
 

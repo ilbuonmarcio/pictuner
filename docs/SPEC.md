@@ -1,7 +1,7 @@
 # PicTuner product specification
 
 Status: agreed product direction; first development implementation available. See [development status](DEVELOPMENT.md) for verified behavior and remaining limitations.
-Updated: 2026-10-19.
+Updated: 2026-10-20.
 
 The app name is **PicTuner** (capital T).
 
@@ -17,29 +17,34 @@ Help a single user quickly edit photos stored in local folders. The primary work
 
 - A workspace references a folder and its nested folders; adding a workspace does not import or duplicate source images.
 - The left sidebar lists saved workspaces and expandable subfolders. Remember registered workspaces across launches.
+- Toggle Workspaces using the toolbar sidebar button or View → Hide/Show Workspaces (⌃⌘S). Remember visibility across launches. Hiding it expands the photo area while preserving the selected workspace, folder, photo, edits, and zoom mode.
 - Selecting a workspace shows its images, including nested folders. Selecting a subfolder narrows the view to that subtree.
 - Use a stable, natural filename ordering with relative path as a deterministic tie-breaker. Additional sorting modes can follow later.
 - The center shows a large preview with fit-to-window and zoom controls.
 - Zoom includes Fit, 100% actual pixels, percentage presets through 800%, and zoom-in/out buttons. At 100%, one source pixel maps to one physical display pixel, accounting for Retina scale. Support pinch-to-zoom, mouse-wheel zoom, Option-scroll zoom, drag/two-finger pan, and double-click to toggle Fit/100% around the clicked image point. Keyboard shortcuts are ⌘0 (Fit), ⌘1 (100%), ⌘+ and ⌘−.
+- A grid button beside the photo transform controls toggles a 3×3 (rule-of-thirds) composition grid over the image. Default off; remember visibility across launches and photo/workspace changes. Align it to the image through zoom, pan, rotation, crop, and original comparison; keep it inside the photo/preview bounds. It is a display overlay and does not enter edits, history, histogram, presets, or export. During crop mode, retain the existing crop-relative grid and contextual controls.
 - Keep the image, shadows, and all overlays clipped to the preview area at every zoom/pan position; the toolbar, sidebar, inspector, and filmstrip must remain visible.
 - Zoomed views render additional detail from the source image for the visible region rather than magnifying only the reduced preview. Keep the region under the pointer steady while zooming, constrain panning to the image, and retain the viewport during edits/comparison. Selecting another photo resets to Fit.
 - A bottom filmstrip shows nearby thumbnails, selection, edited status, favorites, rejected status, and a green checkmark for photos included in export.
 - Left/right arrows navigate previous/next image while the browsing surface has focus. Do not intercept typing or slider keyboard input. Stop at the first and last image rather than wrapping.
 - Support selecting multiple images for batch adjustments and export while maintaining one active preview image.
 - Missing, unreadable, or unsupported files show a useful error without losing saved edits or preventing navigation.
+- The workspace folder's context menu offers **Reset Workspace…**. Require confirmation naming the workspace and explaining that all photo adjustments (including crop/rotation/mirroring), favorites, rejections, and export marks in the entire workspace/subfolders will be cleared. Keep source files, the workspace registration, saved presets, and current folder/photo selection. Reset is not undoable; clear existing edit history after success. Preserve metadata path associations for missing/unreadable photos, resetting their settings too. Do not reset during loading/export or bypass metadata errors/conflict checks.
 
 ## Layout
+
+On every launch, fill the current display’s available width and height, respecting the menu bar and Dock. Override the previously saved window size at opening; keep normal window controls and allow resizing afterward.
 
 | Area | Contents |
 | --- | --- |
 | Left | Workspace list and folder tree |
 | Center | Main image, zoom, comparison button and state |
 | Right, top | Histogram and clipping controls |
-| Right, body | Light, Color, Selective, and Effects tabs; one group at a time, no vertical scrolling |
+| Right, body | Four always-visible bordered panels in two columns: Light/Effects on the left, Color/Selective Color on the right |
 | Above filmstrip | Crop/rotate/flip, Favorite/Reject/export marking, and Photo actions menu; contextual crop controls while cropping |
 | Bottom | Filmstrip and image selection/navigation |
 
-Keep the histogram and clipping toggle visible above the adjustment tabs, with Reset All Edits fixed at the bottom. Light contains tone controls; Color contains white balance, hue and saturation; Selective contains the eyedropper and all seven range/effect sliders; Effects contains looks, vignette, and presets. Each panel must fit at the minimum 1000 × 680 content size without scrolling or hiding controls. Switching tabs preserves adjustments and cancels transient color picking/mask views when leaving Selective.
+Keep the histogram, channel selector, and clipping toggle above a 720-point-wide, two-column inspector. Give Light, Color, Selective Color, and Effects distinct bordered cards with contrasting header bands and icons. Light also contains Detail controls; Color contains Color Grading. Effects groups Looks, Vignette, Glow, and Film Grain. Slider rows show their label, slider, value, and Reset together on one line. The histogram plot is 168 points tall (three times the previous height) when the inspector has at least 1000 points of height, and 112 points (twice the previous height) in shorter windows. Show all 36 adjustment sliders, selective-color enable/picker/mask controls, looks, vignette, and per-control resets at once, with no adjustment tabs, collapsed groups, or inspector scrolling. Selective sliders stay visible and editable when the effect is disabled; its enable checkbox controls whether those settings affect the image, and the mask toggle is disabled while the effect is off. Keep presets, Save Preset, and Reset All Edits in the bottom bar. The minimum content size is 1340 × 900, retaining a usable photo area with Workspaces visible.
 
 Copy/paste and multi-selection actions live in the Photo actions menu above the filmstrip. Batch actions only appear for multiple selections. Crop mode replaces that bar with aspect, Reset, Cancel and Apply controls beside the image.
 
@@ -66,9 +71,22 @@ Initial adjustments:
 - Configurable black and white and sepia looks.
 - Configurable vignette effects, with at least strength, radius, and softness.
 
-Distinguish numerical adjustments from presets, which store reusable settings. Provide built-in looks and the ability to save custom presets. Applying a preset changes editable settings and is undoable. Exact slider ranges and additional vignette styles will be validated against the rendering implementation.
+Additional adjustments:
+
+- Vibrance (−1…1) complements Saturation.
+- Clarity and Texture (−1…1): broad midtone contrast and finer surface detail; negative values soften.
+- Sharpening amount (0…2) and source-pixel radius (0.3…5 px), plus Noise Reduction (0…1).
+- Glow strength (0…1) and radius (0.002…0.06 of the image’s shorter dimension).
+- Color Grading: separate shadow/highlight hue (0…360°) and tint strength (0…1), with tonal balance (−1…1). Tint strengths default to zero.
+- Film Grain strength (0…1) and source-pixel size (0.5…8 px). Use a fixed, image-aligned pattern so redraws and panning do not randomize grain.
+
+All new amounts default to neutral, persist per photo, and participate in live preview, histogram, original comparison, undo/reset, presets, copy/batch operations, and export. Spatial effects use source-aligned radii and context outside zoom crops so their edges do not develop seams. The original comparison bypasses all these effects while retaining geometry.
+
+Distinguish numerical adjustments from presets, which store reusable settings. Keep Black & White and Sepia as sliders and provide the ability to save custom presets. Do not show Natural, Mono, or Sepia preset buttons. Applying a preset changes editable settings and is undoable. Exact slider ranges and additional vignette styles will be validated against the rendering implementation.
 
 - Provide reset and undo/redo for image edits; coalesce one slider drag into one undo action.
+- Put a small Reset beside every adjustment slider and the sampled-color selector. Reset only that control to its model default, preserving other edits; each image-setting reset is one undoable, autosaved action. Disable Reset when already at the default.
+- Also provide individual Reset buttons for histogram channels (RGB), zoom (Fit), crop aspect (Free), and export settings. These restore only that selector/option; display/export choices do not enter photo-edit undo history, and crop aspect stays a draft until Apply.
 - Apply slider and setting changes continuously while dragging; do not wait for mouse release or a pause in input. The preview, histogram, and mask/clipping views should follow completed live frames. A smaller interactive preview is acceptable if the normal-resolution preview is restored after release; export always uses full-resolution source data.
 - Copy/paste adjustments between photos and apply adjustments to selected images. These operations copy settings, not rendered pixels.
 - Editing one image must not inadvertently change another image's saved state.
@@ -78,7 +96,7 @@ Distinguish numerical adjustments from presets, which store reusable settings. P
 - Provide 90° clockwise/counterclockwise rotation and horizontal/vertical flip in the photo toolbar above the filmstrip and the Photo menu.
 - Crop (⌘K) shows the full rotated/mirrored image at Fit, with a draggable rectangle, corner handles, rule-of-thirds grid, and dimmed excluded area. Drag inside to move the selection, or outside it to draw a new rectangle.
 - Offer Free, Original, 1:1, 4:3, 3:2, 16:9, 3:4, 2:3, and 9:16 aspect ratios. Original means the full image's current rotated aspect ratio.
-- Apply/Return commits one undoable crop; Cancel/Escape discards the draft. Arrow keys move the crop by one source pixel, Shift-arrow by ten. Reset restores the largest crop for the selected aspect. Remove Crop restores the full frame without changing color edits, rotation, or mirror settings.
+- Apply/Return commits one undoable crop; Cancel/Escape discards the draft. Arrow keys move the crop by one source pixel, Shift-arrow by ten. Reset Crop restores the largest crop for the selected aspect. Remove Crop restores the full frame without changing color edits, rotation, or mirror settings.
 - Geometry changes reset the viewport to Fit. Rotating/flipping a cropped image transforms the existing selection along with it. Navigating away cancels an uncommitted crop; export waits until Apply or Cancel.
 - Persist normalized crop coordinates after rotation/mirroring. Round crop boundaries once at source resolution; preview, detail rendering, histogram, sampling, and export use that same image geometry.
 - Presets, copy/paste, and batch color edits preserve each destination photo's own framing. The main Reset action resets all edits, including geometry.
@@ -173,7 +191,7 @@ These phases are implementation order, not permission to omit later phases from 
 
 ## Acceptance criteria
 
-- At minimum window size, switch through all adjustment tabs with selective color enabled and confirm every control fits without inspector scrolling. Verify crop controls and photo actions fit the narrowest preview.
+- At minimum window size, confirm every adjustment slider and selector is visible together, with selective color both enabled and disabled, without inspector scrolling or section switching. Verify crop controls and photo actions fit the narrowest preview.
 
 - Add a folder with nested JPEG, PNG, and supported RAW samples; navigate it without modifying source files.
 - Adjust a photo, navigate away and back, restart the app, and verify settings and appearance persist.

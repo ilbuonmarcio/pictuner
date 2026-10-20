@@ -25,9 +25,13 @@ Keep these responsibilities separate:
 
 ## Editor layout
 
-`InspectorView` keeps the histogram/clipping controls and reset footer fixed, with a session-local Light/Color/Selective/Effects selection. It lays out one adjustment group at a time without a scroll container. Switching groups changes only presentation; leaving Selective clears transient picker/mask state. Existing bindings and slider gesture callbacks continue to drive live rendering and undo grouping.
+The 215-point-wide Workspaces sidebar is conditional layout content controlled by the shared `workspaceSidebarVisible` AppStorage preference (default visible). The toolbar button and View menu/⌃⌘S shortcut use the same preference. Removing the sidebar and divider gives their width to the preview without reopening the workspace or replacing the editor model; canvas resize handling refines Fit/detail rendering and constrains the existing viewport normally.
 
-`PhotoToolbar` sits between the preview and filmstrip. It owns transform actions, Favorite/Reject/export marking, and a Photo actions menu with copy/paste plus contextual batch actions. During crop mode, the same bar presents aspect, Reset, Cancel and Apply. Layout checks bound each expanded inspector group's fitting height to 680 points at 290 points wide, and both toolbar states to 400 points wide.
+`InspectorView` is 720 points wide, with a histogram/channel/clipping header, two always-visible columns, and a presets/reset footer. Four bordered cards use tinted icon/title header bands to separate controls: Light and Effects occupy the left column; Color and Selective Color occupy the right. Light contains tone and Detail controls; Color includes Vibrance and Color Grading. Effects starts with Black & White and Sepia sliders, followed by Vignette, Glow, and Film Grain with internal dividers; there are no built-in look buttons. Compact rows keep all 36 sliders and their values/reset buttons visible on one line each. `ContentView` supplies the available inspector height through a geometry reader: the histogram plot uses 168 points at heights of 1000 or more, and 112 points below that threshold. There is no section-selection state, conditional selective-slider hiding, or scroll container. Disabling selective color clears its transient picker/mask state while keeping its parameters visible and editable. Existing bindings and slider gesture callbacks continue to drive live rendering and undo grouping. `ResetValueButton` writes a model-derived default through the same control binding and disables itself when already at that value. Per-image resets therefore use the usual undo/autosave/render path; sampled-color reset updates its three HSV components atomically. View/export defaults and crop-draft resets stay in their existing state domains.
+
+The `compositionGridVisible` AppStorage preference (default false) is shared by the photo toolbar’s grid button and `ContentView`, which passes it to `PhotoCanvas`. The canvas draws two lines in each direction at image-relative thirds after the overview/detail/clipping layers, with dark-under-white strokes clipped to both image and canvas. Zoom/pan and original comparison use the same image rectangle; this view-only overlay never enters the renderer or metadata. Crop mode continues to use its existing crop-relative thirds grid instead.
+
+`PhotoToolbar` sits between the preview and filmstrip. It owns transform actions, Favorite/Reject/export marking, and a Photo actions menu with copy/paste plus contextual batch actions. During crop mode, the same bar presents aspect with its own Reset, Reset Crop, Cancel and Apply. Layout checks bound the entire inspector's fitting height to 900 points with the 112-point plot and to 1000 points with the 168-point plot, at 720 points wide with selective color both enabled and disabled, and both toolbar states to 400 points wide. The root content minimum is 1340 × 900 to accommodate both columns alongside the photo and Workspaces; the window fills the current display's available frame on every launch. `OpeningWindowSize` attaches to the scene content and applies `NSScreen.visibleFrame` on the next main-queue turn after window attachment, overriding restored dimensions while respecting the menu bar/Dock. It sizes each window once, so normal user resizing and subsequent view updates remain unaffected. The 1480 × 900 SwiftUI default is only a fallback before the opening frame is applied.
 
 ## Rendering contract
 
@@ -35,13 +39,14 @@ Define one versioned, deterministic adjustment order. A starting proposal is:
 
 1. Decode, orientation, RAW baseline and input color management.
 2. Quarter-turn rotation, mirroring, and source-pixel crop.
-3. White balance and exposure.
-4. Tone adjustments: brightness, contrast, highlights and shadows.
-5. Global hue and saturation.
-6. Selective color.
-7. Black and white/sepia treatment.
-8. Vignette.
-9. Output color conversion.
+3. Optional noise reduction.
+4. White balance, exposure, brightness, contrast, highlights and shadows.
+5. Global hue, saturation, and vibrance.
+6. Clarity (midtone local contrast) and Texture (finer local contrast).
+7. Selective color.
+8. Black and white/sepia treatment, then shadow/highlight color grading.
+9. Source-pixel sharpening, proportional-radius bloom, and vignette.
+10. Deterministic monochrome grain, then output color conversion.
 
 Validate this order visually before freezing it. Document interactions such as a monochrome preset removing color retained by selective color. Use resolution-independent effect parameters so vignette and other spatial effects scale consistently.
 
@@ -50,6 +55,10 @@ The original branch stops before user color/tone/effect adjustments but retains 
 Selective-color sampling should use the input to the selective-color stage, with a clearly defined coordinate transform from displayed image to source. Persist the sampled color and its color-space interpretation. Use circular hue distance and smooth weights for hue, saturation and brightness. Disabling the effect must be an identity operation.
 
 The implementation evaluates selective-color HSV in gamma-encoded sRGB. Temperature and tint are offsets around a 6500 K neutral in the common post-development pipeline. Selected brightness is an exposure offset in stops. Preview uses a maximum 1,800-pixel long edge when settled and 1,000 pixels during a slider drag; spatial parameters use proportions rather than fixed pixels. Current runtime kernels are deprecated; migrating them to packaged Metal kernels remains a release task.
+
+`PhotoEffects` owns the local-contrast, grading, and grain kernels; native Core Image filters supply vibrance, denoise, sharpening, and bloom. Neutral strengths bypass their stages. Clarity and Texture use luminance differences against Gaussian baselines at 1.2% and 0.15% of the final image’s shorter dimension; Clarity weights midtones. Grading blends hue chroma separately into shadows/highlights, with a balance-controlled tonal transition and reduced influence at pure black/white. Sharpen/grain radii are specified in source pixels. Grain uses smooth deterministic coordinate noise, anchored to the cropped/oriented source, with reduced amplitude below its pixel scale; it is not regenerated randomly per frame.
+
+Zoom baselines include a source halo for the chained neighborhood effects. Radius/halo geometry is shared with the full rendering, and all images (original, edited, sampling, mask, clipping) are cropped back to the requested visible region. Cache identity includes the halo and scale. The padded baseline remains bounded by the existing 4,096/1,000-pixel settled/interactive limits; unusually large effect contexts can reduce the detail refinement scale rather than allocating unbounded buffers. Histogram statistics still cover the whole edited image. Preview evaluates the same ordered graph at its working resolution; fine sharpening, grain, and noise differences should be inspected at 100%.
 
 `PhotoViewport` represents physical-display-pixels per source pixel, plus a normalized bottom-left image center. The canvas converts this to points using its window's backing scale, anchors gestures at the pointer, and reports its visible source region. Fit follows window size; 100% is native display-pixel inspection rather than a multiple of Fit. Viewport state is transient and resets per photo.
 
@@ -63,8 +72,8 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 ```json
 {
-  "schemaVersion": 3,
-  "renderVersion": 1,
+  "schemaVersion": 4,
+  "renderVersion": 2,
   "workspaceID": "UUID",
   "images": {
     "shoot/car.raw": {
@@ -80,13 +89,17 @@ The workspace root contains `.pictuner/workspace.json`. Proposed structure:
 
 This illustrates structure, not a finalized settings schema. Define typed adjustment fields, neutral defaults, effect enablement, ranges and selective-color parameters before implementation. Use stable workspace/image identities as needed; relative paths alone do not solve external renames.
 
-Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1 and 2 to schema 3 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
+Metadata schema 2 adds `exportReady`. The store explicitly migrates schema 1–3 to schema 4/render version 2 in memory; missing flags default to false while existing adjustments/favorites/rejections are preserved. The upgraded version is persisted on the next normal save. A rejected entry is normalized to unmarked on decode. Export jobs are assembled only from marked, non-rejected entries; optional scopes can narrow this set but cannot widen it to unmarked photos.
 
 Schema 3 adds `adjustments.geometry`: clockwise `quarterTurns`, two mirror flags, and an optional normalized bottom-left `crop` rectangle in the rotated/mirrored coordinate system. Older adjustments and presets decode with neutral geometry. Invalid crop bounds reject metadata decoding, preserving the existing file. Geometry edits use the existing adjustment undo records and autosave. Reusable color presets/copy/batch operations preserve each destination's geometry.
+
+Schema 4/render version 2 adds the 15 effect parameters with neutral missing-key defaults. Existing color edits, geometry, flags, identities, and missing-file entries are retained; migration writes only on the normal save path. Older app versions reject this metadata instead of silently dropping effect fields. Out-of-range new parameters reject decoding and preserve the file. Reusable presets decode missing effect parameters to the same defaults.
 
 `Renderer.render` applies geometry before color/effects. Preview applies the same source-pixel crop before downsampling and invalidates its bounded baselines when geometry changes. Detail regions use the resulting cropped image coordinate system; vignette is relative to that final frame. Interactive crop mode submits an uncropped adjustment snapshot while keeping the draft only in memory. Apply commits one adjustment; cancel/navigation discards it. Geometry transitions invalidate pending frames and reset Fit to prevent stale dimensions or sampling coordinates.
 
 Serialize writes through one store. Debounce slider updates, then flush on image transitions and normal termination. Write a temporary file on the same volume and atomically replace the metadata file. Preserve the last valid data if decoding, migration or saving fails. Handle termination/save completion explicitly rather than relying on a best-effort background task.
+
+The workspace context menu holds a specific reset target until an explicit destructive confirmation. `WorkspaceStore.resetImages()` replaces settings for every known relative path with `ImageSettings()` while retaining workspace identity, last image, and path keys, including missing files. It uses the same lock, conflict/version/symlink checks, and atomic save; failed saves restore the previous in-memory document. `AppModel.resetWorkspace` flushes pending edits for an active target first and publishes defaults only after a successful reset save. Success clears that workspace's current undo/redo, crop/comparison/picker state and invalidates pending preview frames before requesting the default rendering at Fit. Inactive targets use a separate store, leaving the active editor intact. Missing roots are rejected rather than recreated. Registrations and reusable presets are unchanged; loading/exporting disables reset.
 
 Store app-wide workspace registrations, security-scoped bookmarks if needed, and reusable user presets in application support. Keep regenerable caches in the appropriate macOS cache location, keyed by source identity/change information, adjustments, and render version. Do not mix cache files into authoritative workspace metadata.
 

@@ -1,51 +1,56 @@
 import SwiftUI
 
-enum InspectorSection: String, CaseIterable, Identifiable {
-    case light = "Light", color = "Color", selective = "Selective", effects = "Effects"
-    var id: String { rawValue }
-}
-
 struct InspectorView: View {
     @EnvironmentObject var model: AppModel
-    @State private var selectedSection: InspectorSection
+    static let width: CGFloat = 720
+    static let minimumHeight: CGFloat = 900
+    var histogramHeight: CGFloat = 168
     @State private var histogramRGB = true
     @State private var presetName = ""
     @State private var namingPreset = false
 
-    init(section: InspectorSection = .light) {
-        _selectedSection = State(initialValue: section)
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            histogram.padding(16)
-            Picker("Adjustments", selection: $selectedSection) {
-                ForEach(InspectorSection.allCases) { Text($0.rawValue).tag($0) }
-            }.labelsHidden().pickerStyle(.segmented).controlSize(.small)
-                .padding(.horizontal, 16).padding(.bottom, 16)
+            histogram.padding(12)
             Divider()
-            VStack(alignment: .leading, spacing: 14) {
-                switch selectedSection {
-                case .light: light
-                case .color: color
-                case .selective: selectiveColor
-                case .effects: effects
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                .disabled(!model.canEdit || model.isCropping)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 12) {
+                    panel("Light", icon: "sun.max") { light }
+                    panel("Effects", icon: "camera.filters") {
+                        looks
+                        Divider().padding(.vertical, 3)
+                        Text("Vignette").font(.system(size: 11, weight: .semibold))
+                        vignette
+                        Divider().padding(.vertical, 3)
+                        adjustment("Glow", \.glow, 0...1)
+                        adjustment("Glow radius", \.glowRadius, 0.002...0.06, digits: 3)
+                        Divider().padding(.vertical, 3)
+                        adjustment("Film grain", \.grain, 0...1)
+                        adjustment("Grain size", \.grainSize, 0.5...8, unit: " px", digits: 1)
+                    }
+                }.frame(maxWidth: .infinity, alignment: .topLeading)
+                VStack(alignment: .leading, spacing: 12) {
+                    panel("Color", icon: "paintpalette") { color }
+                    panel("Selective Color", icon: "eyedropper") { selectiveColor }
+                }.frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .padding(12)
+            .disabled(!model.canEdit || model.isCropping)
             Spacer(minLength: 0)
             Divider()
-            HStack {
+            HStack(spacing: 10) {
+                Menu("Presets") {
+                    ForEach(model.presets) { preset in Button(preset.name) { model.applyColorAdjustments(preset.adjustments) } }
+                }.fixedSize().disabled(model.presets.isEmpty)
+                Button("Save Preset…") { namingPreset = true }
                 Spacer()
                 Button("Reset All Edits") { model.setAdjustments(Adjustments()) }
                     .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(.secondary)
                     .help("Reset color, effects, crop, rotation and mirror settings")
-                    .disabled(!model.canEdit || model.isCropping || !model.settings.adjustments.isEdited)
-            }.padding(.horizontal, 16).frame(height: 38)
+                    .disabled(!model.settings.adjustments.isEdited)
+            }.controlSize(.small).padding(.horizontal, 12).frame(height: 36)
+                .disabled(!model.canEdit || model.isCropping)
         }.background(Color(nsColor: .controlBackgroundColor).opacity(0.35))
-            .onChange(of: selectedSection) { _, section in
-                if section != .selective { model.pickingColor = false; model.showMask = false }
-            }
             .alert("Save Preset", isPresented: $namingPreset) {
                 TextField("Preset name", text: $presetName)
                 Button("Cancel", role: .cancel) { presetName = "" }
@@ -60,6 +65,13 @@ struct InspectorView: View {
             adjustment("Contrast", \.contrast, 0.5...1.8)
             adjustment("Highlights", \.highlights, 0...1)
             adjustment("Shadows", \.shadows, 0...1)
+            Divider().padding(.vertical, 3)
+            Text("Detail").font(.system(size: 11, weight: .semibold))
+            adjustment("Noise reduction", \.noiseReduction, 0...1)
+            adjustment("Clarity", \.clarity, -1...1)
+            adjustment("Texture", \.texture, -1...1)
+            adjustment("Sharpening", \.sharpening, 0...2)
+            adjustment("Sharpen radius", \.sharpeningRadius, 0.3...5, unit: " px", digits: 1)
         }
     }
     private var color: some View {
@@ -68,65 +80,90 @@ struct InspectorView: View {
             adjustment("Tint", \.tint, -100...100, digits: 0)
             adjustment("Saturation", \.saturation, 0...2)
             adjustment("Hue", \.hue, -180...180, unit: "°", digits: 0)
+            adjustment("Vibrance", \.vibrance, -1...1)
+            Divider().padding(.vertical, 3)
+            Text("Color Grading").font(.system(size: 11, weight: .semibold))
+            adjustment("Shadow hue", \.shadowHue, 0...360, unit: "°", digits: 0)
+                .tint(Color(hue: model.settings.adjustments.shadowHue/360, saturation: 0.75, brightness: 0.95))
+            adjustment("Shadow tint", \.shadowTint, 0...1)
+            adjustment("Highlight hue", \.highlightHue, 0...360, unit: "°", digits: 0)
+                .tint(Color(hue: model.settings.adjustments.highlightHue/360, saturation: 0.75, brightness: 0.95))
+            adjustment("Highlight tint", \.highlightTint, 0...1)
+            adjustment("Grading balance", \.gradingBalance, -1...1)
         }
     }
-    private var effects: some View {
+    private var looks: some View {
         Group {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Looks").font(.system(size: 12, weight: .semibold))
-                HStack(spacing: 6) {
-                    presetButton("Natural") { Adjustments() }
-                    presetButton("Mono") { var a = Adjustments(); a.monochrome = 1; return a }
-                    presetButton("Sepia") { var a = Adjustments(); a.sepia = 0.8; return a }
-                }
-                adjustment("Black & white", \.monochrome, 0...1)
-                adjustment("Sepia", \.sepia, 0...1)
-            }
-            Divider()
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Vignette").font(.system(size: 12, weight: .semibold))
-                adjustment("Strength", \.vignette, 0...1)
-                adjustment("Radius", \.vignetteRadius, 0.1...1.8)
-                adjustment("Softness", \.vignetteSoftness, 0.05...1.5)
-            }
-            HStack {
-                Menu("Presets") {
-                    ForEach(model.presets) { preset in Button(preset.name) { model.applyColorAdjustments(preset.adjustments) } }
-                }.disabled(model.presets.isEmpty)
-                Button("Save Preset…") { namingPreset = true }
-            }.controlSize(.small)
+            adjustment("Black & white", \.monochrome, 0...1)
+            adjustment("Sepia", \.sepia, 0...1)
         }
+    }
+    private var vignette: some View {
+        Group {
+            adjustment("Strength", \.vignette, 0...1)
+            adjustment("Radius", \.vignetteRadius, 0.1...1.8)
+            adjustment("Softness", \.vignetteSoftness, 0.05...1.5)
+        }
+    }
+    static func histogramHeight(for availableHeight: CGFloat) -> CGFloat {
+        availableHeight >= 1000 ? 168 : 112
+    }
+
+    private func panel<Content: View>(_ title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                Image(systemName: icon).foregroundStyle(.tint).accessibilityHidden(true)
+                Text(title)
+                Spacer(minLength: 0)
+            }.font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(.white.opacity(0.045))
+            Divider()
+            VStack(alignment: .leading, spacing: 4) { content() }.padding(10)
+        }
+        .background(.white.opacity(0.025), in: RoundedRectangle(cornerRadius: 9))
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .overlay { RoundedRectangle(cornerRadius: 9).strokeBorder(.white.opacity(0.13)) }
+        .accessibilityElement(children: .contain).accessibilityLabel(title)
     }
     private var histogram: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Histogram").font(.system(size: 11, weight: .medium))
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text("Histogram").font(.system(size: 12, weight: .semibold))
                 Spacer()
+                Toggle("Show clipping", isOn: $model.showClipping).font(.system(size: 11)).toggleStyle(.checkbox)
+                    .help("Red marks any sRGB channel at white; blue marks any channel at black.")
+                    .disabled(model.preview == nil)
                 Picker("Channels", selection: $histogramRGB) { Text("RGB").tag(true); Text("Luma").tag(false) }
                     .labelsHidden().pickerStyle(.segmented).controlSize(.small).frame(width: 112)
+                ResetValueButton(title: "Histogram channels", value: $histogramRGB, defaultValue: true)
             }
             HistogramView(data: model.showingOriginal ? model.preview?.originalHistogram : model.preview?.histogram, rgb: histogramRGB)
-                .frame(height: 72).background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 6))
-            Toggle("Show clipping", isOn: $model.showClipping).font(.system(size: 11)).toggleStyle(.checkbox)
-                .help("Red marks any sRGB channel at white; blue marks any channel at black.")
-                .disabled(model.preview == nil)
+                .frame(height: histogramHeight).background(.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 6))
         }
     }
     private func adjustment(_ label: String, _ key: WritableKeyPath<Adjustments, Double>, _ range: ClosedRange<Double>, unit: String = "", digits: Int = 2) -> some View {
-        EditSlider(title: label, value: model.adjustmentBinding(key), range: range, unit: unit, digits: digits, onEditing: model.editingGesture)
+        EditSlider(title: label, value: model.adjustmentBinding(key), defaultValue: Adjustments()[keyPath: key], range: range, unit: unit, digits: digits, onEditing: model.editingGesture)
     }
     private func selectiveSlider(_ label: String, _ key: WritableKeyPath<SelectiveColor, Double>, _ range: ClosedRange<Double>) -> some View {
-        EditSlider(title: label, value: model.selectiveBinding(key), range: range, onEditing: model.editingGesture)
+        EditSlider(title: label, value: model.selectiveBinding(key), defaultValue: SelectiveColor()[keyPath: key], range: range, onEditing: model.editingGesture)
     }
-    private func presetButton(_ name: String, make: @escaping () -> Adjustments) -> some View {
-        Button(name) { model.applyColorAdjustments(make()) }.font(.system(size: 11)).frame(maxWidth: .infinity)
+    private var sampledColor: Binding<SIMD3<Double>> {
+        Binding(get: {
+            let s = model.settings.adjustments.selective
+            return SIMD3(s.hue, s.saturation, s.brightness)
+        }, set: { sample in
+            var a = model.settings.adjustments
+            a.selective.hue = sample.x; a.selective.saturation = sample.y; a.selective.brightness = sample.z
+            model.setAdjustments(a)
+        })
     }
     private var selectiveColor: some View {
         Group {
             HStack(spacing: 8) {
                 Toggle("Enabled", isOn: Binding(get: { model.settings.adjustments.selective.enabled }, set: { value in
                     var a = model.settings.adjustments; a.selective.enabled = value; model.setAdjustments(a)
-                    if !value { model.showMask = false }
+                    if !value { model.showMask = false; model.pickingColor = false }
                 })).font(.system(size: 11)).toggleStyle(.checkbox)
                     .accessibilityLabel("Selective color").help("Selects matching colors throughout the image.")
                 Spacer(minLength: 0)
@@ -135,8 +172,10 @@ struct InspectorView: View {
                 Button(model.pickingColor ? "Cancel" : "Pick Color…") {
                     model.pickingColor.toggle(); model.showMask = false; model.showingOriginal = false
                 }.controlSize(.small).disabled(model.preview == nil || model.isRendering)
+                ResetValueButton(title: "Sampled color", value: sampledColor,
+                    defaultValue: SIMD3(SelectiveColor().hue, SelectiveColor().saturation, SelectiveColor().brightness))
             }
-            if model.settings.adjustments.selective.enabled {
+            Group {
                 selectiveSlider("Hue range", \.hueRange, 0...0.5)
                 selectiveSlider("Saturation tolerance", \.saturationTolerance, 0...1)
                 selectiveSlider("Brightness tolerance", \.brightnessTolerance, 0...1)
@@ -145,6 +184,7 @@ struct InspectorView: View {
                 selectiveSlider("Selected brightness", \.selectedBrightness, -2...2)
                 selectiveSlider("Other colors' saturation", \.outsideSaturation, 0...1)
                 Toggle("Show mask", isOn: $model.showMask).font(.system(size: 11)).toggleStyle(.checkbox)
+                    .disabled(!model.settings.adjustments.selective.enabled)
             }
         }
     }
@@ -153,19 +193,21 @@ struct InspectorView: View {
 private struct EditSlider: View {
     let title: String
     @Binding var value: Double
+    let defaultValue: Double
     let range: ClosedRange<Double>
     var unit = ""
     var digits = 2
     let onEditing: (Bool) -> Void
     var body: some View {
-        VStack(spacing: 3) {
-            HStack {
-                Text(title).foregroundStyle(.secondary)
-                Spacer()
-                Text(String(format: "%.*f", digits, value)+unit).monospacedDigit().foregroundStyle(.primary.opacity(0.8))
-            }.font(.system(size: 11))
-            Slider(value: $value, in: range, onEditingChanged: onEditing).controlSize(.mini).accessibilityLabel(title)
-        }
+        HStack(spacing: 6) {
+            Text(title).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.9)
+                .frame(width: 124, alignment: .leading)
+            Slider(value: $value, in: range, onEditingChanged: onEditing)
+                .controlSize(.mini).accessibilityLabel(title).frame(minWidth: 55)
+            Text(String(format: "%.*f", digits, value)+unit).monospacedDigit().foregroundStyle(.primary.opacity(0.8))
+                .frame(width: 45, alignment: .trailing)
+            ResetValueButton(title: title, value: $value, defaultValue: defaultValue)
+        }.font(.system(size: 11)).frame(height: 20)
     }
 }
 

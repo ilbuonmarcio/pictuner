@@ -5,12 +5,14 @@ import AppKit
 struct PicTunerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
+    @AppStorage("workspaceSidebarVisible") private var workspaceSidebarVisible = true
     var body: some Scene {
         Window("PicTuner", id: "main") {
             ContentView().environmentObject(model)
+                .background(OpeningWindowSize())
                 .onAppear { delegate.model = model }
         }
-        .defaultSize(width: 1360, height: 900)
+        .defaultSize(width: 1480, height: 900)
         .windowToolbarStyle(.unifiedCompact)
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -26,6 +28,11 @@ struct PicTunerApp: App {
                 Button("Zoom Out") { model.zoomBy(1/sqrt(2)) }.keyboardShortcut("-", modifiers: .command).disabled(model.preview == nil || model.isCropping)
                 Button("Fit to Window") { model.setZoom(nil) }.keyboardShortcut("0", modifiers: .command).disabled(model.preview == nil || model.isCropping)
                 Button("Actual Pixels (100%)") { model.setZoom(1) }.keyboardShortcut("1", modifiers: .command).disabled(model.preview == nil || model.isCropping)
+            }
+            CommandGroup(after: .sidebar) {
+                Button(workspaceSidebarVisible ? "Hide Workspaces" : "Show Workspaces") {
+                    workspaceSidebarVisible.toggle()
+                }.keyboardShortcut("s", modifiers: [.control, .command])
             }
             CommandMenu("Photo") {
                 Button("Crop…", action: model.beginCrop).keyboardShortcut("k").disabled(!model.canEdit || model.preview == nil || model.isCropping)

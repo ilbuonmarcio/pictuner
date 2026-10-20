@@ -3,9 +3,10 @@ import SwiftUI
 /// Photo actions stay next to the image; crop mode replaces them with its contextual controls.
 struct PhotoToolbar: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage("compositionGridVisible") private var compositionGridVisible = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if model.isCropping { cropControls } else { photoControls }
         }.font(.system(size: 12)).buttonStyle(.borderless).controlSize(.small)
             .padding(.horizontal, 16).frame(height: 42)
@@ -29,6 +30,17 @@ struct PhotoToolbar: View {
                 }
             } label: { Image(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right") }
                 .menuStyle(.borderlessButton).fixedSize().help("Flip and crop options").accessibilityLabel("Flip and crop options").disabled(!model.canEdit)
+            Button { compositionGridVisible.toggle() } label: {
+                Image(systemName: "grid")
+                    .foregroundStyle(compositionGridVisible ? Color.accentColor : .secondary)
+                    .frame(width: 20, height: 22)
+                    .background(compositionGridVisible ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 4))
+            }
+            .help(compositionGridVisible ? "Hide 3×3 grid" : "Show 3×3 grid")
+            .accessibilityLabel("Composition grid")
+            .accessibilityValue(compositionGridVisible ? "Shown" : "Hidden")
+            .accessibilityAddTraits(compositionGridVisible ? .isSelected : [])
+            .disabled(model.preview == nil)
             Spacer(minLength: 4)
             Button(action: model.toggleFavorite) { Image(systemName: model.settings.favorite ? "star.fill" : "star") }
                 .foregroundStyle(model.settings.favorite ? .yellow : .secondary)
@@ -56,10 +68,13 @@ struct PhotoToolbar: View {
     }
     private var cropControls: some View {
         Group {
-            Picker("Aspect", selection: Binding(get: { model.cropAspect }, set: model.setCropAspect)) {
-                ForEach(CropAspect.allCases) { Text($0.rawValue).tag($0) }
-            }.frame(width: 124).disabled(model.preview == nil)
-            Button("Reset", action: model.resetCropDraft).help("Reset crop bounds").disabled(model.preview == nil)
+            HStack(spacing: 6) {
+                Picker("Aspect", selection: Binding(get: { model.cropAspect }, set: model.setCropAspect)) {
+                    ForEach(CropAspect.allCases) { Text($0.rawValue).tag($0) }
+                }.labelsHidden().frame(width: 82).help("Crop aspect ratio").accessibilityLabel("Crop aspect ratio")
+                ResetValueButton(title: "Crop aspect ratio", value: Binding(get: { model.cropAspect }, set: model.setCropAspect), defaultValue: .free)
+            }.disabled(model.preview == nil)
+            Button("Reset Crop", action: model.resetCropDraft).help("Reset crop bounds").disabled(model.preview == nil)
             Spacer(minLength: 4)
             Button("Cancel", action: model.cancelCrop).help("Cancel crop · Esc")
             Button("Apply", action: model.applyCrop).buttonStyle(.borderedProminent)

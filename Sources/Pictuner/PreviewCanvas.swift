@@ -11,6 +11,7 @@ struct PreviewCanvas: NSViewRepresentable {
     let identity: String?
     let viewport: PhotoViewport
     let picking: Bool
+    let showGrid: Bool
     let crop: CropRegion?
     let cropRatio: Double?
     let cropChanged: (CropRegion) -> Void
@@ -38,7 +39,7 @@ struct PreviewCanvas: NSViewRepresentable {
         }
         view.image = image; view.clipping = clipping
         view.detailImage = detailImage; view.detailClipping = detailClipping; view.detailRegion = detailRegion
-        view.sourceSize = sourceSize; view.viewport = viewport
+        view.sourceSize = sourceSize; view.viewport = viewport; view.showGrid = showGrid
         if (view.crop == nil) != (crop == nil) {
             view.window?.invalidateCursorRects(for: view)
             if crop != nil {
@@ -68,6 +69,7 @@ final class PhotoCanvas: NSView {
     var identity: String?
     var viewport = PhotoViewport()
     var picking = false
+    var showGrid = false
     var crop: CropRegion?
     var cropRatio: Double?
     var cropChanged: ((CropRegion) -> Void)?
@@ -156,6 +158,30 @@ final class PhotoCanvas: NSView {
             context.restoreGState()
         }
         if let crop { drawCrop(crop, context: context) }
+        else if showGrid { drawCompositionGrid(context: context) }
+    }
+    private func drawCompositionGrid(context: CGContext) {
+        let rect = imageRect
+        guard rect.width > 0, rect.height > 0 else { return }
+        let path = CGMutablePath()
+        for fraction in [1.0/3, 2.0/3] {
+            path.move(to: CGPoint(x: rect.minX+rect.width*fraction, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.minX+rect.width*fraction, y: rect.maxY))
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY+rect.height*fraction))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY+rect.height*fraction))
+        }
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.clip(to: rect)
+        // A dark underlay keeps the thin white lines readable on both bright and dark photos.
+        context.addPath(path)
+        context.setStrokeColor(NSColor.black.withAlphaComponent(0.45).cgColor)
+        context.setLineWidth(2)
+        context.strokePath()
+        context.addPath(path)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.65).cgColor)
+        context.setLineWidth(0.75)
+        context.strokePath()
     }
     private func normalized(_ point: CGPoint) -> CGPoint {
         let rect = imageRect
