@@ -39,6 +39,10 @@ When the filmstrip is on the right, the geometry reader measures the whole right
 
 `AppModel.comparisonWipe` and its normalized visible-region position are transient. The canvas draws edited overview/detail first, then clips original overview/detail (and matching clipping overlays) to the left of the divider. Labels/handle/grid are drawn afterward and all branches clip to canvas bounds. The divider's position is relative to the image's intersection with the viewport, so zoom/pan cannot strand it offscreen. Handle dragging changes view state only; drags elsewhere retain panning. Option-arrow/View menu actions provide keyboard access. Original comparison, mask, picker, and crop select the same image/detail branches as before; a held original or mask/picker suspends the wipe without changing its position. Histogram statistics remain full-frame rather than describing a composite screenshot.
 
+`PictureSurface` shares the native canvas and status overlays between the editor and a `PictureWindowController`-owned AppKit window. Detachment mounts only one canvas, preserving the shared model, viewport and single bounded detail cache. Window geometry/backing-scale callbacks refine detail for the destination display; deferred callbacks from removed canvases are ignored. Closing the picture window releases its hosting tree and restores the editor canvas; closing the editor also closes the picture window. Detachment is session-only controller state, outside photo metadata.
+
+`AppModel.exportOnly` is a transient browsing filter. `visiblePhotos` intersects the folder scope with explicit export approval and non-rejection, so the filmstrip, navigation and Select All share one ordering. Toggling the filter and changing approval/rejection reconcile active and multi-selection through normal selection/save/render invalidation. Workspace loading respects the filter and empty results clear the preview. Export job assembly remains independent of this display filter.
+
 ## Rendering contract
 
 Define one versioned, deterministic adjustment order. A starting proposal is:

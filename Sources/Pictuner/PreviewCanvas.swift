@@ -145,6 +145,7 @@ final class PhotoCanvas: NSView {
         RunLoop.main.perform(inModes: [.common]) { [weak self] in
             guard let self else { return }
             self.geometryReportPending = false
+            guard self.window != nil else { return }
             // A deferred resize report must not overwrite a newer toolbar/menu zoom setting
             // with native view state from before SwiftUI has applied that setting.
             self.geometryChanged?(self.bounds.size, self.backing)

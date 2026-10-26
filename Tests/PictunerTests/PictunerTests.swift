@@ -217,6 +217,41 @@ final class PictunerTests: XCTestCase {
 }
 
 final class WorkflowTests: XCTestCase {
+    @MainActor func testExportFilterControlsNavigationAndRemoval() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("PicTunerFilter-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let renderer = Renderer()
+        for name in ["1.png", "2.png", "3.png"] {
+            let image = CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 20, height: 20))
+            try renderer.context.writePNGRepresentation(of: image, to: root.appendingPathComponent(name), format: .RGBA8, colorSpace: renderer.colorSpace)
+        }
+        let model = AppModel(restoringSession: false, supportDirectory: root.appendingPathComponent("support"))
+        model.open(WorkspaceReference(path: root.path))
+        for _ in 0..<100 where model.isLoading { try await Task.sleep(for: .milliseconds(20)) }
+        XCTAssertEqual(model.photos.count, 3)
+        model.setExportReady(true, for: ["1.png", "3.png"])
+        model.toggleExportOnly()
+        XCTAssertEqual(model.visiblePhotos.map(\.name), ["1.png", "3.png"])
+        model.navigate(1)
+        XCTAssertEqual(model.activePhoto?.name, "3.png")
+        model.navigate(1)
+        XCTAssertEqual(model.activePhoto?.name, "3.png")
+        model.navigate(-1)
+        XCTAssertEqual(model.activePhoto?.name, "1.png")
+        model.toggleExportReady()
+        XCTAssertEqual(model.activePhoto?.name, "3.png")
+        model.toggleRejected()
+        XCTAssertTrue(model.visiblePhotos.isEmpty)
+        XCTAssertNil(model.activePhoto)
+        model.navigate(1)
+        XCTAssertNil(model.activePhoto)
+        model.toggleExportOnly()
+        XCTAssertEqual(model.visiblePhotos.count, 3)
+        XCTAssertEqual(model.activePhoto?.name, "1.png")
+        XCTAssertTrue(model.prepareToQuit())
+    }
+
     @MainActor func testRapidSelectionCannotPublishPreviousImageAndEditsPersist() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("PictunerWorkflow-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

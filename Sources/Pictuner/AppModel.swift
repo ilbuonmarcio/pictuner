@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
     @Published var photos: [Photo] = []
     @Published var selectedID: String?
     @Published var selectedIDs: Set<String> = []
+    @Published private(set) var exportOnly = false
     @Published var folder = ""
     @Published var settings = ImageSettings()
     @Published var preview: PreviewResult?
@@ -82,7 +83,25 @@ final class AppModel: ObservableObject {
         supportDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Pictuner", isDirectory: true)
     }
     var activePhoto: Photo? { photos.first { $0.id == selectedID } }
-    var visiblePhotos: [Photo] { photos.filter { folder.isEmpty || $0.relativePath.hasPrefix(folder + "/") } }
+    var visiblePhotos: [Photo] {
+        photos.filter { photo in
+            guard folder.isEmpty || photo.relativePath.hasPrefix(folder + "/") else { return false }
+            let entry = savedSettings(for: photo)
+            return !exportOnly || (entry.exportReady && !entry.rejected)
+        }
+    }
+
+    func toggleExportOnly() {
+        guard flush() else { return }
+        exportOnly.toggle()
+        reconcileVisibleSelection()
+    }
+
+    private func reconcileVisibleSelection() {
+        let visible = visiblePhotos
+        if !visible.contains(where: { $0.id == selectedID }) { select(visible.first) }
+        selectedIDs.formIntersection(Set(visible.map(\.id)))
+    }
     var folders: [String] {
         var result = Set<String>()
         for photo in photos {
@@ -189,6 +208,7 @@ final class AppModel: ObservableObject {
         undoStack = []; redoStack = []; gestureStart = nil; updateUndoState()
         cropDraft = nil; levelingHorizon = false; straightenGesture = false
         resetGeometryPreview()
+        if exportOnly { reconcileVisibleSelection() }
         requestPreview()
     }
 
@@ -212,7 +232,7 @@ final class AppModel: ObservableObject {
                 case .success(let photos):
                     self.photos = photos
                     let remembered = self.store?.document.lastImage
-                    self.select(photos.first { $0.id == remembered } ?? photos.first)
+                    self.select(self.visiblePhotos.first { $0.id == remembered } ?? self.visiblePhotos.first)
                 case .failure(let error): self.errorMessage = error.localizedDescription
                 }
             }
@@ -321,6 +341,7 @@ final class AppModel: ObservableObject {
         settings.rejected.toggle()
         if settings.rejected { settings.exportReady = false }
         changed()
+        if exportOnly { reconcileVisibleSelection() }
     }
     func toggleExportReady() {
         guard let id = selectedID else { return }
@@ -336,6 +357,7 @@ final class AppModel: ObservableObject {
             if photo.id == selectedID { settings = entry }
         }
         scheduleSave()
+        if exportOnly { reconcileVisibleSelection() }
     }
     func savedSettings(for photo: Photo) -> ImageSettings { photo.id == selectedID ? settings : store?.settings(for: photo.id) ?? ImageSettings() }
     // Framing and EXIF captions belong to each photo; reusable color edits leave them alone.

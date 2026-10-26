@@ -7,7 +7,7 @@ private let accent = Color(red: 0.95, green: 0.69, blue: 0.36)
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("workspaceSidebarVisible") private var workspaceSidebarVisible = true
-    @AppStorage("compositionGridVisible") private var compositionGridVisible = false
+    @StateObject private var pictureWindow = PictureWindowController()
     @State private var showingMetadataControls = false
     var body: some View {
         HStack(spacing: 0) {
@@ -20,24 +20,14 @@ struct ContentView: View {
                     previewToolbar
                     Divider()
                 }
-                ZStack {
-                    photoCanvas
-                    if model.activePhoto == nil { emptyState }
-                    else if let error = model.previewError {
-                        ContentUnavailableView("Unable to open image", systemImage: "exclamationmark.triangle", description: Text(error))
-                    } else if model.preview == nil { ProgressView().accessibilityLabel("Loading image").padding(20).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12)) }
-                    VStack {
-                        HStack {
-                            if model.showingOriginal { badge("Original", icon: "circle.lefthalf.filled") }
-                            else if model.showMask { badge("Mask", icon: "viewfinder") }
-                            else if model.pickingColor { badge("Pick a color", icon: "eyedropper") }
-                            else if model.levelingHorizon { badge("Draw horizon", icon: "angle") }
-                            Spacer()
-                            if model.isRendering && model.preview != nil { ProgressView().controlSize(.small).padding(12) }
-                        }
-                        Spacer()
-                    }.padding(18).allowsHitTesting(false)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if pictureWindow.isDetached {
+                    VStack(spacing: 12) {
+                        Image(systemName: "rectangle.on.rectangle").font(.largeTitle).foregroundStyle(.secondary)
+                        Button("Return Picture to Editor") { pictureWindow.attach() }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    PictureSurface().environmentObject(model)
+                }
                 if model.isCropping {
                     Divider()
                     StraightenToolbar()
@@ -84,6 +74,27 @@ struct ContentView: View {
                     .disabled(model.distractionFree)
             }
             ToolbarItem(placement: .primaryAction) {
+                Button(action: model.toggleExportOnly) {
+                    Image(systemName: model.exportOnly ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(model.exportOnly ? accent : .secondary)
+                }
+                .accessibilityLabel("Show Only Included for Export")
+                .accessibilityValue(model.exportOnly ? "On" : "Off")
+                .help(model.exportOnly ? "Show all photos" : "Show only photos included for export · Arrow keys browse the filtered photos")
+                .disabled(model.isLoading)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    if pictureWindow.isDetached { pictureWindow.attach() }
+                    else { pictureWindow.detach(model: model) }
+                } label: {
+                    Image(systemName: pictureWindow.isDetached ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle")
+                }
+                .accessibilityLabel(pictureWindow.isDetached ? "Return Picture to Editor" : "Detach Picture")
+                .help(pictureWindow.isDetached ? "Return picture to editor" : "Detach picture · Drag its window to another display")
+                .disabled(model.preview == nil && !pictureWindow.isDetached)
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button { showingMetadataControls.toggle() } label: {
                     Image(systemName: "text.below.photo")
                         .foregroundStyle(model.settings.adjustments.metadataOverlay.enabled ? accent : .secondary)
@@ -93,7 +104,8 @@ struct ContentView: View {
                 .disabled(model.preview == nil || !model.canEdit || model.isCropping)
                 .popover(isPresented: $showingMetadataControls) {
                     MetadataOverlayControls().tint(accent)
-                        .onExitCommand { showingMetadataControls = false }
+                        .onDisappear { pictureWindow.attach() }
+        .onExitCommand { showingMetadataControls = false }
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -136,57 +148,6 @@ struct ContentView: View {
         } message: { Text(model.exportSummary ?? "") }
     }
 
-    private var photoCanvas: PreviewCanvas {
-        PreviewCanvas(image: displayImage,
-            clipping: displayClipping,
-            detailImage: displayDetail,
-            detailClipping: detailClipping,
-            detailRegion: model.preview?.detail?.region,
-            sourceSize: model.preview?.sourceSize ?? .zero,
-            identity: model.selectedID,
-            viewport: model.viewport,
-            picking: model.pickingColor,
-            showGrid: compositionGridVisible,
-            crop: model.preview == nil ? nil : model.cropDraft,
-            cropRatio: model.cropRatio,
-            originalImage: model.preview?.original,
-            originalDetail: model.preview?.detail?.original,
-            originalClipping: model.showClipping ? model.preview?.originalClipping : nil,
-            originalDetailClipping: model.showClipping ? model.preview?.detail?.originalClipping : nil,
-            wipe: model.activeWipe,
-            wipeChanged: model.setWipePosition,
-            leveling: model.levelingHorizon,
-            horizonChanged: model.levelHorizon,
-            escape: model.escapePreview,
-            cropChanged: model.updateCrop,
-            cropFinished: { if $0 { model.applyCrop() } else { model.cancelCrop() } },
-            viewportChanged: { model.updateViewport($0, canvas: $1, backing: $2) },
-            geometryChanged: { model.updateCanvasGeometry($0, backing: $1) },
-            compare: { model.showingOriginal = $0 },
-            navigate: model.navigate,
-            sample: model.sampleColor)
-    }
-
-    private var displayImage: CGImage? {
-        guard let preview = model.preview else { return nil }
-        if model.showingOriginal { return preview.original }
-        if model.showMask, let mask = preview.mask { return mask }
-        return preview.edited
-    }
-    private var displayClipping: CGImage? {
-        guard model.showClipping, !model.showMask else { return nil }
-        return model.showingOriginal ? model.preview?.originalClipping : model.preview?.clipping
-    }
-    private var displayDetail: CGImage? {
-        guard let detail = model.preview?.detail else { return nil }
-        if model.showingOriginal { return detail.original }
-        if model.showMask { return detail.mask ?? detail.edited }
-        return detail.edited
-    }
-    private var detailClipping: CGImage? {
-        guard model.showClipping, !model.showMask else { return nil }
-        return model.showingOriginal ? model.preview?.detail?.originalClipping : model.preview?.detail?.clipping
-    }
     private var previewToolbar: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -210,17 +171,6 @@ struct ContentView: View {
                 Button { model.zoomBy(sqrt(2)) } label: { Image(systemName: "plus.magnifyingglass") }.help("Zoom in · ⌘+").accessibilityLabel("Zoom in")
             }.buttonStyle(.borderless).disabled(model.preview == nil || model.isCropping)
         }.padding(.horizontal, 16).frame(height: 58)
-    }
-    private var emptyState: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "photo.on.rectangle").font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
-            Text(model.isLoading ? "Loading…" : model.activeWorkspace == nil ? "No Workspace" : "No Images").font(.system(size: 18, weight: .medium))
-            if model.activeWorkspace == nil { Button("Add Workspace…", action: model.addWorkspace).buttonStyle(.borderedProminent).controlSize(.large) }
-            if model.isLoading { ProgressView().controlSize(.small) }
-        }.padding(32)
-    }
-    private func badge(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon).font(.system(size: 11, weight: .medium)).padding(.horizontal, 10).padding(.vertical, 7).background(.regularMaterial, in: Capsule())
     }
     private var statusBar: some View {
         HStack(spacing: 10) {
