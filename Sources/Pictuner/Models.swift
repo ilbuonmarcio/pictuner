@@ -167,7 +167,7 @@ enum ImageFiles {
         rawExtensions.contains(url.pathExtension.lowercased()) || UTType(filenameExtension: url.pathExtension)?.conforms(to: .rawImage) == true
     }
     static func isSupported(_ url: URL) -> Bool {
-        ["jpg", "jpeg", "png"].contains(url.pathExtension.lowercased()) || isRAW(url)
+        ["jpg", "jpeg", "png", "heic", "heif"].contains(url.pathExtension.lowercased()) || isRAW(url)
     }
     static func scan(_ root: URL) throws -> [Photo] {
         let root = root.resolvingSymlinksInPath().standardizedFileURL

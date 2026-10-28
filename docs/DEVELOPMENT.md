@@ -1,6 +1,6 @@
 # First development version
 
-Updated: 2026-10-20. This is a local development app, not a signed/notarized distribution release.
+Updated: 2026-10-28. This is a local development app, not a signed/notarized distribution release.
 
 ## Implemented
 
@@ -33,7 +33,8 @@ Updated: 2026-10-20. This is a local development app, not a signed/notarized dis
 
 - Registered workspace folders, recursive natural-order image enumeration, expandable subfolder navigation, and refresh/remove-reference actions.
 - Non-destructive crop with corner handles, move/draw interactions, aspect presets, Apply/Cancel/Reset/Remove Crop, keyboard crop movement, and ⌘K. Clockwise/counterclockwise 90° rotation and horizontal/vertical mirror preserve existing crop selections. Source-resolution geometry is shared across preview/detail/histogram/sampling/export, with metadata schema 5 migration and undo/redo. Color presets and copied/batched edits preserve destination framing.
-- JPEG/PNG loading and RAW development through `CIRAWFilter`; unsupported camera files produce an error without blocking navigation.
+- HEIC/HEIF discovery accepts `.heic`/`.heif` with any capitalization. Generated HEIC fixtures on macOS 26.6.2 verify orientation-aware thumbnails, edited preview/histogram, JPEG/PNG export and unchanged source bytes; real camera/phone HEIC samples have not been validated.
+- JPEG/PNG/HEIC/HEIF loading and RAW development through `CIRAWFilter`; unsupported camera files produce an error without blocking navigation.
 - Dark native interface with amber accents, a large preview, lazy thumbnail filmstrip, and source-detail zoom. Fit, actual-pixel 100%, percentage presets through 800%, zoom buttons, pinch/mouse-wheel/Option-scroll zoom, drag/two-finger pan, and double-click Fit/100% are available. Shortcuts: ⌘0, ⌘1, ⌘+, ⌘−. Actual-pixel zoom accounts for Retina backing scale.
 - Left/right browsing when the preview has keyboard focus; image selection focuses the preview. Slider and text-field keyboard input stays with those controls.
 - Exposure, brightness, contrast, highlights, shadows, temperature/tint offsets, saturation, hue, black and white, sepia, and adjustable vignette.

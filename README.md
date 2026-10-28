@@ -24,7 +24,7 @@ Browse your photos, tune their look, and export the keepers. PicTuner works dire
 - **Date & GPS labels.** Add the photo’s EXIF capture time and coordinates from the toolbar, choose one of six positions, and adjust margins and text size. Labels appear in exported copies; missing fields stay absent.
 - **Export recipes.** Choose Web Page (full-resolution JPEG 80%), Instagram (JPEG 100%), Full Resolution (JPEG 95%), or Lossless (16-bit PNG). All four keep full rendered dimensions, and settings remain editable.
 - **Deliberate export.** Mark photos with **Include in Export**, then export just those photos as JPEG or PNG, with optional resizing and subfolder preservation.
-- **RAW support.** Develop camera RAW files using macOS’s RAW decoder, alongside JPEG and PNG. Supported cameras and formats depend on the host macOS version.
+- **RAW support.** Develop camera RAW files using macOS’s RAW decoder, alongside JPEG, PNG, and HEIC/HEIF. Supported cameras and formats depend on the host macOS version.
 
 Everything runs locally. No accounts, cloud uploads, analytics, or third-party application dependencies.
 

@@ -43,6 +43,8 @@ When the filmstrip is on the right, the geometry reader measures the whole right
 
 `AppModel.exportOnly` is a transient browsing filter. `visiblePhotos` intersects the folder scope with explicit export approval and non-rejection, so the filmstrip, navigation and Select All share one ordering. Toggling the filter and changing approval/rejection reconcile active and multi-selection through normal selection/save/render invalidation. Workspace loading respects the filter and empty results clear the preview. Export job assembly remains independent of this display filter.
 
+Workspace discovery accepts JPEG, PNG, HEIC/HEIF (`.heic`/`.heif`, case-insensitive), and camera RAW extensions. HEIC/HEIF uses the existing orientation-aware Core Image decode and ImageIO thumbnail/metadata paths, feeding the shared preview, detail, histogram and export pipeline. Export formats remain JPEG and PNG; no source conversion or metadata migration is required.
+
 ## Rendering contract
 
 Define one versioned, deterministic adjustment order. A starting proposal is:

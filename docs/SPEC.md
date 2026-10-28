@@ -56,7 +56,7 @@ Use concise native-app labels. Avoid marketing slogans, demo copy, repeated expl
 
 ## Image formats and RAW
 
-- The initial release supports JPEG, PNG, and RAW files supported by the selected macOS RAW decoder.
+- The initial release supports JPEG, PNG, HEIC/HEIF (`.heic` and `.heif`, case-insensitive), and RAW files supported by the selected macOS RAW decoder.
 - Validate representative real camera samples during implementation and document the tested formats, cameras, and macOS versions. Do not promise universal RAW support.
 - RAW development includes exposure, white balance, highlights, and shadows. It must use the RAW data for final rendering rather than exporting an embedded JPEG preview.
 - The unedited baseline is a consistent default development of the RAW image. Non-RAW baselines respect orientation and embedded color profiles.
@@ -213,7 +213,7 @@ These phases are implementation order, not permission to omit later phases from 
 
 - At minimum window size, confirm every adjustment slider and selector is visible together, with selective color both enabled and disabled, without inspector scrolling or section switching. Verify crop controls and photo actions fit the narrowest preview.
 
-- Add a folder with nested JPEG, PNG, and supported RAW samples; navigate it without modifying source files.
+- Add a folder with nested JPEG, PNG, HEIC/HEIF, and supported RAW samples; navigate it without modifying source files.
 - Adjust a photo, navigate away and back, restart the app, and verify settings and appearance persist.
 - Hold/release Space and the comparison button; confirm the correct original appears without moving the viewport or changing edits.
 - Inspect a high-frequency test image at 100% on a Retina display and verify source pixels resolve beyond the overview's detail. Verify anchored zoom, bounded panning, Fit reset, higher-resolution original/mask/clipping views, and unchanged photo metadata when zooming. Vignette position and other image-wide effect coordinates must remain consistent in the detail region.

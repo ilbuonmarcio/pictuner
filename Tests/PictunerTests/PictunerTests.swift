@@ -115,6 +115,59 @@ final class PictunerTests: XCTestCase {
         XCTAssertEqual(try ImageFiles.scan(root).map(\.relativePath), ["2.jpg", "10.jpg", "nested/camera.nef"])
     }
 
+    func testScanIncludesHEICAndHEIFCaseInsensitively() throws {
+        let names = ["1.heic", "2.HEIC", "nested/3.heif", "nested/4.HeIf"]
+        for name in names {
+            let url = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: url)
+            XCTAssertFalse(ImageFiles.isRAW(url))
+        }
+        XCTAssertEqual(try ImageFiles.scan(root).map(\.relativePath), names)
+    }
+
+    func testHEICPreviewThumbnailAndExportPreserveSource() throws {
+        let renderer = Renderer()
+        let input = CIImage(color: CIColor(red: 0.2, green: 0.3, blue: 0.1))
+            .cropped(to: CGRect(x: 0, y: 0, width: 120, height: 80))
+        let cgImage = try renderer.cgImage(input)
+        // Create real HEIC data, including an orientation that swaps the dimensions.
+        for name in ["photo.HEIC", "photo.heif"] {
+            let url = root.appendingPathComponent(name)
+            let destination = try XCTUnwrap(CGImageDestinationCreateWithURL(url as CFURL, UTType.heic.identifier as CFString, 1, nil))
+            CGImageDestinationAddImage(destination, cgImage, [kCGImagePropertyOrientation: 6] as CFDictionary)
+            XCTAssertTrue(CGImageDestinationFinalize(destination))
+            let originalBytes = try Data(contentsOf: url)
+            let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))
+            let type = try XCTUnwrap(CGImageSourceGetType(source) as String?)
+            XCTAssertTrue([UTType.heic.identifier, UTType.heif.identifier].contains(type))
+            let thumbnail = try XCTUnwrap(CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: 60
+            ] as CFDictionary))
+            XCTAssertLessThan(thumbnail.width, thumbnail.height)
+            var adjustments = Adjustments(); adjustments.exposure = 1
+            let preview = try renderer.preview(url: url, adjustments: adjustments)
+            XCTAssertEqual(preview.sourceSize, CGSize(width: 80, height: 120))
+            XCTAssertGreaterThan(preview.histogram.red.reduce(0, +), 0)
+            XCTAssertGreaterThan(pixel(CIImage(cgImage: preview.edited), renderer: renderer)[0],
+                                 pixel(CIImage(cgImage: preview.original), renderer: renderer)[0])
+            for format in OutputFormat.allCases {
+                var options = ExportOptions(); options.format = format
+                let output = root.appendingPathComponent("output-\(name)-\(format.rawValue)")
+                let result = Exporter.run(items: [ExportItem(photo: Photo(relativePath: name, url: url), adjustments: adjustments)], destination: output, roots: [], options: options, cancellation: ExportCancellation()) { _, _ in }
+                XCTAssertEqual(result.completed, 1); XCTAssertEqual(result.errors, [])
+                let exportedURL = output.appendingPathComponent(format == .jpeg ? "photo.jpg" : "photo.png")
+                let exported = try XCTUnwrap(CIImage(contentsOf: exportedURL))
+                XCTAssertEqual(exported.extent.size, preview.sourceSize)
+                XCTAssertGreaterThan(pixel(exported, renderer: renderer)[0],
+                                     pixel(CIImage(cgImage: preview.original), renderer: renderer)[0])
+            }
+            XCTAssertEqual(try Data(contentsOf: url), originalBytes)
+        }
+    }
+
     func testExportNeverOverwritesExistingFileOrLinks() throws {
         let workspace = root.appendingPathComponent("workspace")
         let output = root.appendingPathComponent("output")
